@@ -4,6 +4,7 @@ import { AuthService } from './auth.service';
 import { BalanceService } from './balance.service';
 import { localDate, share } from './finance';
 import { Movement, MovementType, MovementFilters } from '../models/models';
+import { isConfirmed, plannedMonthMovements } from './recurring';
 @Injectable({ providedIn: 'root' })
 export class ViewService {
   store = inject(StoreService);
@@ -22,10 +23,11 @@ export class ViewService {
   listSearch = signal('');
   listType = signal<MovementType | 'all'>('all');
   listSettings = signal<Omit<MovementFilters, 'name'>>({ minCents: null, maxCents: null, createdBy: '', sort: 'date-desc' });
-  hasListFilters = computed(() => !!(this.listType() !== 'all' || this.listCategory() || this.listSubcategory() || this.listSearch() || this.listSettings().minCents !== null || this.listSettings().maxCents !== null || this.listSettings().createdBy));
+  hasListFilters = computed(() => !!(this.listType() !== 'all' || this.listCategory() || this.listSubcategory() || this.listSearch() || this.listSettings().minCents !== null || this.listSettings().maxCents !== null || this.listSettings().createdBy || this.listSettings().recurringExpenses));
   breakdownType = signal<MovementType>('expense');
   uid = computed(() => this.auth.user()?.uid || '');
   filtered = computed(() => this.store.movements().filter(item => {
+    if (!isConfirmed(item)) return false;
     const from = this.from() || (this.period() === 'year' ? `${this.year()}-01-01` : `${this.month()}-01`);
     const to = this.to() || (this.period() === 'year' ? `${this.year()}-12-31` : `${this.month()}-31`);
     if (item.date < from || item.date > to || this.category() && item.categoryId !== this.category()) return false;
@@ -34,15 +36,27 @@ export class ViewService {
     return this.scope() === 'shared' ? item.space === 'shared' : item.space === 'individual' ? item.ownerId === this.uid() : true;
   }).sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt)));
   summary = computed(() => this.balances.summary(this.filtered(), this.scope() === 'personal' ? this.uid() : undefined));
-  listMovements = computed(() => {
+  plannedMovements = computed(() => plannedMonthMovements(this.store.recurringMovements(), this.store.movements(), this.month())
+    .filter(item => this.scope() === 'shared' ? item.space === 'shared' : item.space === 'shared' || item.ownerId === this.uid()));
+  pending = computed(() => this.plannedMovements().filter(item => !isConfirmed(item)));
+  pendingTotals = computed(() => {
+    const total = (type: MovementType) => this.pending().filter(item => item.type === type).reduce((sum, item) => sum + this.displayAmount(item), 0);
+    return { incomeCents: total('income'), expenseCents: total('expense') };
+  });
+  private matchesList(item: Movement): boolean {
     const normalize = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es');
-    const name = normalize(this.listSearch().trim());
+    const settings = this.listSettings(), amount = this.displayAmount(item);
+    return (this.listType() === 'all' || item.type === this.listType())
+      && (!this.listCategory() || item.categoryId === this.listCategory())
+      && (!this.listSubcategory() || (item.subcategoryId || '__none__') === this.listSubcategory())
+      && normalize(item.concept).includes(normalize(this.listSearch().trim()))
+      && (settings.minCents === null || amount >= settings.minCents) && (settings.maxCents === null || amount <= settings.maxCents)
+      && (!settings.createdBy || item.createdBy === settings.createdBy)
+      && (!settings.recurringExpenses || item.type === 'expense' && !!item.recurringId);
+  }
+  listMovements = computed(() => {
     const settings = this.listSettings();
-    return this.filtered().filter(item => {
-      const amount = this.displayAmount(item);
-      return (this.listType() === 'all' || item.type === this.listType()) && (!this.listCategory() || item.categoryId === this.listCategory()) && (!this.listSubcategory() || (item.subcategoryId || '__none__') === this.listSubcategory()) && normalize(item.concept).includes(name)
-        && (settings.minCents === null || amount >= settings.minCents) && (settings.maxCents === null || amount <= settings.maxCents) && (!settings.createdBy || item.createdBy === settings.createdBy);
-    }).sort((a, b) => {
+    return this.filtered().filter(item => this.matchesList(item)).sort((a, b) => {
       const date = b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt);
       if (settings.sort === 'date-asc') return -date;
       if (settings.sort === 'amount-asc') return this.displayAmount(a) - this.displayAmount(b) || date;
@@ -52,12 +66,15 @@ export class ViewService {
   });
   months = computed(() => Array.from({ length: 12 }, (_, index) => {
     const month = `${this.year()}-${String(index + 1).padStart(2, '0')}`;
+    const planned = plannedMonthMovements(this.store.recurringMovements(), this.store.movements(), month).filter(item => this.scope() === 'personal' || item.space === 'shared');
     return {
       month,
+      pendingCount: planned.filter(item => !isConfirmed(item)).length,
+      hasPlanned: planned.length > 0,
       label: new Intl.DateTimeFormat('es-ES', { month: 'long' }).format(new Date(this.year(), index, 1)),
       ...this.balances.summary(this.filtered().filter(item => item.date.startsWith(month)), this.scope() === 'personal' ? this.uid() : undefined)
     };
-  }).filter(row => row.month <= localDate().slice(0, 7) && (row.incomeCents !== 0 || row.expenseCents !== 0)));
+  }).filter(row => row.month <= localDate().slice(0, 7) && (row.incomeCents !== 0 || row.expenseCents !== 0 || row.hasPlanned)));
   breakdown = computed(() => {
     const categories = this.store.categories();
     const totals = new Map<string, number>();
@@ -74,7 +91,7 @@ export class ViewService {
       ? share(movement.amountCents, this.store.couple()!.memberIds, this.uid())
       : movement.amountCents;
   }
-  categoryLabel(item: Movement): string {
+  categoryLabel(item: Pick<Movement, 'categoryId' | 'subcategoryId'>): string {
     const categories = this.store.categories();
     const parent = categories.find(category => category.id === item.categoryId);
     const child = categories.find(category => category.id === item.subcategoryId);

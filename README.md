@@ -45,7 +45,23 @@ En este entorno se ha preparado un Node compatible dentro de `.runtime/`, porque
 
 Los importes se guardan como enteros en céntimos. Si un movimiento compartido tiene un número impar de céntimos, el primer miembro recibe el céntimo adicional en su atribución y, en pagos a medias, abona ese céntimo. La suma de las partes conserva siempre el importe original.
 
-No se incluyen recurrencias, presupuestos, inversiones, importación bancaria, privacidad entre miembros ni repartos personalizados.
+Desde Configuración → Categorías → detalle → Editar se puede elegir una **Subcategoría por defecto**, o Ninguna. Por ejemplo, Coche → Gasolina. Al crear movimientos o recurrencias, seleccionar Coche elige Gasolina y propone ese nombre. La sugerencia cambia al elegir otra subcategoría mientras el nombre siga siendo automático o esté vacío; los nombres escritos manualmente y los movimientos ya guardados se respetan. Al eliminar una subcategoría predeterminada se limpia también la referencia. Esta preferencia se guarda en `Category.defaultSubcategoryId`, es opcional y requiere publicar las reglas de Firestore actualizadas. Las categorías existentes sin este campo conservan su comportamiento hasta configurar una preferencia.
+
+La página Recurrentes permite configurar ingresos y gastos mensuales con fechas de inicio y fin (opcional), uno o varios días de pago/cobro y opciones para editar, pausar y reanudar. Los días que no existen en un mes se ajustan al último día, sin duplicar apariciones en esa fecha.
+
+Al consultar un mes se calculan sus pendientes, sin realizar cargos ni necesitar tareas programadas. No cuentan en ingresos, gastos, categorías ni deudas hasta confirmar su cobro o pago. Al confirmar se pueden ajustar importe y fecha reales; también se puede omitir una aparición. Los listados y el detalle identifican los recurrentes con ↻, y el modal de filtros permite mostrar solo gastos recurrentes. Los meses anteriores con pendientes aparecen en el resumen anual aunque no tengan movimientos confirmados.
+
+La gestión de apariciones se realiza en **Gastos previstos**, una suboperación del mes en el menú de escritorio y móvil. La página utiliza la ruta `/resumen/:month/previstos` y el breadcrumb Resumen / año / mes / Gastos previstos, y conserva el espacio y los filtros al volver al resumen. Permite consultar gastos e ingresos, buscar, confirmar pagos/cobros u omitir apariciones. Recurrentes aparece antes de Liquidaciones en la navegación principal.
+
+Al confirmar, la aparición permanece en Gastos previstos como Pagado o Cobrado, con fecha prevista y fecha real. Se muestran también inicio, fin opcional, días de pago/cobro de cada mes, importe recurrente, espacio, pagador/receptor y estado de la recurrencia, junto con las acciones para editarla y consultar el movimiento confirmado. La página usa el mes de la fecha prevista, aunque el pago real se registre en otro mes. Los importes por pagar/cobrar y los avisos solo incluyen apariciones sin confirmar. Los omitidos se mantienen ocultos.
+
+Si se adelanta la fecha de inicio, se incorporan los días del intervalo ampliado usando la configuración de esa edición. Por ejemplo, corregir el inicio del 19 al 1 de noviembre de un pago mensual del día 2 añade el previsto del 2 de noviembre. Los ya confirmados u omitidos no se duplican, y las siguientes ediciones o pausas conservan esos previstos históricos.
+
+Al llegar la fecha prevista, la aplicación muestra un aviso con acceso directo al mes que necesita revisión. Los movimientos de meses anteriores siguen avisando; se prioriza el mes más antiguo y el aviso se actualiza al confirmar u omitir. Se comprueba la fecha al entrar, recuperar el foco o la visibilidad y cada minuto. Es un aviso dentro de la aplicación.
+
+Las ediciones, pausas y reanudaciones se aplican desde el día del cambio y conservan las versiones anteriores y los movimientos confirmados. El tipo y el espacio de una recurrencia se mantienen; para cambiarlos se crea otra. La confirmación utiliza un ID estable por recurrencia y fecha prevista y una transacción para evitar duplicados entre cuentas. Eliminar una aparición confirmada la marca como omitida, para que no vuelva a generarse. Los datos antiguos sin recurrencias siguen funcionando.
+
+No se incluyen presupuestos, inversiones, importación bancaria ni repartos personalizados.
 
 ## Entornos y configuración local
 
@@ -103,6 +119,9 @@ Para usar emuladores en desarrollo, completa el JSON local con `apiKey: "demo-ap
 | `couples/{id}/categories/{id}` | Catálogo común con tipo, nombre, símbolo y estado de archivo. |
 | `couples/{id}/movements/{id}` | Tipo, céntimos, fecha local `YYYY-MM-DD`, concepto, categoría, espacio, propietario, pagador/receptor, modalidad de pago y autoría. |
 | `couples/{id}/settlements/{id}` | Céntimos, fecha, emisor, receptor, nota y autoría. |
+| `couples/{id}/recurringMovements/{id}` | Configuración mensual, días, fechas, estado activo/pausado, revisión e historial de versiones. Consulta de Hogar y de las propias individuales. |
+
+Los movimientos confirmados u omitidos de una recurrencia añaden `recurringId`, `scheduledDate` y `status` (`confirmed` o `skipped`). Los pendientes se calculan a partir de la configuración y su historial; no se guardan como movimientos realizados. Se conservan los IDs previstos aunque cambie la fecha real. Las reglas protegen la privacidad individual, los enlaces entre recurrencias y movimientos, la autoría y la conservación del historial de versiones.
 
 La creación y la vinculación se realizan con transacciones: pareja, perfil e invitación se verifican y escriben juntos. La vinculación consume la invitación. Las reglas verifican el estado final, la caducidad y el máximo de dos miembros, incluyendo incorporaciones simultáneas. Los documentos de invitación utilizan códigos aleatorios de 80 bits. Los perfiles de ambos no se exponen: el documento de pareja contiene los nombres necesarios para la interfaz.
 

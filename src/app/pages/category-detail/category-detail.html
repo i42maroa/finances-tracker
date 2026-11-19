@@ -4,6 +4,7 @@
   <section class="panel category-detail" aria-label="Datos de la categoría">
     <div class="category-summary"><span class="category-symbol" [class.income]="item.type === 'income'">{{ item.icon }}</span><div><span class="detail-label">{{ item.type === 'expense' ? 'Gastos' : 'Ingresos' }}</span><h2>{{ item.name }}</h2></div></div>
     @if (!item.parentId) {
+      <p class="category-default"><strong>Subcategoría por defecto:</strong> {{ defaultSubcategory()?.name || 'Ninguna' }}</p>
       <div class="section-heading"><h2>Subcategorías</h2><button type="button" class="add-subcategory" aria-label="Añadir subcategoría" title="Añadir subcategoría" (click)="modal.open({ kind: 'category', parentId: item.id })">+</button></div>
       <div class="subcategory-list">@for (child of children(); track child.id) { <div class="subcategory-row">{{ child.name }}</div> } @empty { <p>No hay subcategorías todavía.</p> }</div>
     }

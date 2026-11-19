@@ -1,0 +1,15 @@
+<app-breadcrumb [items]="[{ label: 'Movimientos recurrentes' }]" />
+<div class="page-heading"><div><h1>Movimientos recurrentes<span>.</span></h1><p>Configura tus cobros y pagos mensuales.</p></div><button type="button" class="button" (click)="add()">＋ Añadir recurrente</button></div>
+<p class="recurring-note">Cada aparición se muestra en Gastos previstos de su mes. Solo cuenta en el balance cuando confirmas el pago o cobro.</p>
+<div class="scope-options" role="group" aria-label="Espacio de los recurrentes"><button type="button" [attr.aria-pressed]="scope() === 'all'" (click)="scope.set('all')">Todos</button><button type="button" [attr.aria-pressed]="scope() === 'shared'" (click)="scope.set('shared')">Hogar</button><button type="button" [attr.aria-pressed]="scope() === 'individual'" (click)="scope.set('individual')">Individual</button></div>
+@if (error()) { <p class="field-error" role="alert">{{ error() }}</p> }
+<div class="recurring-list">
+@for (item of rows(); track item.id) {
+  <article class="panel recurring-card" [attr.aria-label]="item.concept">
+    <div class="recurring-heading"><span class="recurring-symbol" aria-label="Movimiento recurrente">↻</span><div><h2>{{ item.concept }}</h2><p>{{ item.type === 'income' ? 'Ingreso' : 'Gasto' }} · {{ item.space === 'shared' ? 'Hogar' : 'Individual' }} · {{ view.categoryLabel(item) }}</p></div><span class="recurring-status">{{ status(item) }}</span></div>
+    <strong class="recurring-amount" [class.income]="item.type === 'income'">{{ view.money(item.amountCents) }} <small>por aparición</small></strong>
+    <dl><div><dt>{{ item.type === 'income' ? 'Días de cobro' : 'Días de pago' }}</dt><dd>{{ item.days.join(', ') }} de cada mes</dd></div><div><dt>Desde</dt><dd>{{ date(item.startDate) }}</dd></div><div><dt>Hasta</dt><dd>{{ item.endDate ? date(item.endDate) : 'Sin fecha de fin' }}</dd></div><div><dt>{{ item.type === 'income' ? 'Recibe' : 'Paga' }}</dt><dd>{{ item.payment === 'half' ? 'Ambos' : view.name(item.actorId) }}</dd></div></dl>
+    <div class="recurring-actions"><button type="button" class="button secondary" [disabled]="!!busy()" (click)="modal.open({ kind: 'recurring', value: item })">Editar recurrencia</button><button type="button" class="button secondary" [disabled]="!!busy()" (click)="toggle(item)">{{ busy() === item.id ? 'Guardando…' : item.enabled ? 'Pausar' : 'Reanudar' }}</button></div>
+  </article>
+} @empty { <section class="panel empty-state"><span aria-hidden="true">↻</span><h2>No hay movimientos recurrentes</h2><p>Añade una nómina, un alquiler o una suscripción con sus días de cobro o pago.</p></section> }
+</div>

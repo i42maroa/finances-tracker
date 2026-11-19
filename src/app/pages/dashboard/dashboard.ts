@@ -2,6 +2,7 @@ import { Component, computed, effect, inject, signal, ElementRef, ViewChild, Hos
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { MovementSort, MovementType } from '../../models/models';
+import { NavigationService } from '../../services/navigation.service';
 import { ViewService } from '../../services/view.service';
 import { ModalService } from '../../services/modal.service';
 import { FiltersComponent } from '../../shared/filters/filters';
@@ -28,6 +29,7 @@ export class DashboardComponent {
   closeSortOutside(event: MouseEvent): void { if (event.target instanceof Node && !this.sortMenu?.nativeElement.contains(event.target)) this.closeSort(); }
   view = inject(ViewService);
   modal = inject(ModalService);
+  private navigation = inject(NavigationService);
   readonly pageSize = 10;
   readonly page = signal(1);
   readonly pageCount = computed(() => Math.max(1, Math.ceil(this.view.listMovements().length / this.pageSize)));
@@ -82,6 +84,7 @@ export class DashboardComponent {
     return items;
   });
   constructor() {
+    effect(() => { if (this.monthly && this.validMonth()) this.navigation.monthContext.set({ month: this.selectedMonth(), queryParams: this.movementOrigin() }); });
     effect(() => { if (this.view.scope() === 'personal' && this.view.listSettings().createdBy) this.clearAuthorFilter(); });
     effect(() => this.modal.movementSpace.set(this.view.scope() === 'shared' ? 'shared' : 'individual'));
     effect(() => {
@@ -120,7 +123,7 @@ export class DashboardComponent {
     });
   }
   monthFilters() { return { scope: this.view.scope(), type: this.view.listType() }; }
-  movementOrigin() { return { from: 'summary', year: this.monthly ? Number(this.selectedMonth().slice(0, 4)) : this.view.year(), month: this.monthly ? this.selectedMonth() : '', ...this.monthFilters(), listCategory: this.view.listCategory(), listSubcategory: this.view.listSubcategory(), name: this.view.listSearch(), minCents: this.view.listSettings().minCents ?? '', maxCents: this.view.listSettings().maxCents ?? '', createdBy: this.view.listSettings().createdBy, sort: this.view.listSettings().sort }; }
+  movementOrigin() { return { from: 'summary', year: this.monthly ? Number(this.selectedMonth().slice(0, 4)) : this.view.year(), month: this.monthly ? this.selectedMonth() : '', ...this.monthFilters(), listCategory: this.view.listCategory(), listSubcategory: this.view.listSubcategory(), name: this.view.listSearch(), minCents: this.view.listSettings().minCents ?? '', maxCents: this.view.listSettings().maxCents ?? '', createdBy: this.view.listSettings().createdBy, sort: this.view.listSettings().sort, recurringExpenses: this.view.listSettings().recurringExpenses ? '1' : '' }; }
   categoryName() { return this.view.store.categories().find(item => item.id === this.view.listCategory())?.name || this.view.listCategory(); }
   selectSummaryType(type: MovementType | 'all'): void {
     this.view.listType.set(type);
@@ -151,9 +154,10 @@ export class DashboardComponent {
     this.view.breakdownType.set(type === 'income' || type === 'expense' ? type : untracked(() => this.view.store.categories().find(item => item.id === this.view.listCategory())?.type || 'expense'));
     const bound = (name: string) => { const raw = query.get(name); const value = Number(raw); return raw !== null && raw !== '' && Number.isInteger(value) && value >= 0 && value <= 100000000 ? value : null; };
     const sort = query.get('sort');
-    this.view.listSettings.set({ minCents: bound('minCents'), maxCents: bound('maxCents'), createdBy: untracked(() => this.view.scope()) === 'shared' ? query.get('createdBy') || '' : '', sort: ['date-asc', 'amount-asc', 'amount-desc'].includes(sort || '') ? sort as MovementSort : 'date-desc' });
+    this.view.listSettings.set({ minCents: bound('minCents'), maxCents: bound('maxCents'), createdBy: untracked(() => this.view.scope()) === 'shared' ? query.get('createdBy') || '' : '', sort: ['date-asc', 'amount-asc', 'amount-desc'].includes(sort || '') ? sort as MovementSort : 'date-desc', recurringExpenses: query.get('recurringExpenses') === '1' });
   }
   clearAmountFilters(): void { this.view.listSettings.update(value => ({ ...value, minCents: null, maxCents: null })); }
+  clearRecurringFilter(): void { this.view.listSettings.update(value => ({ ...value, recurringExpenses: false })); }
   clearAuthorFilter(): void { this.view.listSettings.update(value => ({ ...value, createdBy: '' })); }
   openFilters(): void { this.modal.open({ kind: 'movement-filters', showAuthor: this.view.scope() === 'shared', value: { name: this.view.listSearch(), ...this.view.listSettings() }, apply: filters => { const { name, ...settings } = filters; this.view.listSearch.set(name); this.view.listSettings.set(settings); } }); }
   goPage(page: number): void {

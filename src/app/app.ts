@@ -10,6 +10,7 @@ import { CoupleComponent } from './pages/couple/couple';
 import { ModalComponent } from './shared/modal/modal';
 import { SkeletonComponent } from './shared/skeleton/skeleton';
 import { NavigationService } from './services/navigation.service';
+import { PlannedService } from './services/planned.service';
 @Component({ selector: 'app-root', imports: [AsyncPipe, NgTemplateOutlet, RouterLink, RouterLinkActive, RouterOutlet, LoginComponent, CoupleComponent, ModalComponent, SkeletonComponent], templateUrl: './app.html', styleUrl: './app.css' })
 export class AppComponent implements OnDestroy {
   @ViewChild('secondaryMenu') secondaryMenu?: ElementRef<HTMLDialogElement>;
@@ -48,9 +49,11 @@ export class AppComponent implements OnDestroy {
   ngOnDestroy(): void { this.closeSecondaryMenu(); }
   auth = inject(AuthService); store = inject(StoreService); modal = inject(ModalService);
   navigation = inject(NavigationService);
+  planned = inject(PlannedService);
   readonly links = computed(() => [
-    { id: 'monthly', path: '/', queryParams: {}, icon: '◫', label: 'Resumen', active: this.navigation.inMonthlySummary(), hideOnBottom: this.navigation.inMonthlySummary() },
-    { id: 'annual', path: '/', queryParams: { year: this.navigation.summaryYear() }, icon: '▦', label: 'Resumen anual', active: this.navigation.inAnnualSummary(), hideOnBottom: !this.navigation.inMonthlySummary() },
+    { id: 'monthly', path: '/', queryParams: {}, icon: '◫', label: 'Resumen', active: this.navigation.inMonth(), hideOnBottom: this.navigation.inMonth() },
+    { id: 'annual', path: '/', queryParams: { year: this.navigation.summaryYear() }, icon: '▦', label: 'Resumen anual', active: this.navigation.inAnnualSummary(), hideOnBottom: !this.navigation.inMonth() },
+    { id: 'recurring', path: '/recurrentes', queryParams: {}, icon: '↻', label: 'Recurrentes', active: this.navigation.path() === '/recurrentes', hideOnBottom: true },
     { id: 'settlements', path: '/liquidaciones', queryParams: {}, icon: '⇌', label: 'Liquidaciones', active: this.navigation.path() === '/liquidaciones', hideOnBottom: false },
     { id: 'settings', path: '/configuracion', queryParams: {}, icon: '⚙', label: 'Configuración', active: this.navigation.inSettings(), hideOnBottom: true }
   ]);

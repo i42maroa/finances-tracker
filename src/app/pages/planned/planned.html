@@ -1,0 +1,36 @@
+<app-breadcrumb [items]="breadcrumbs()" />
+@if (validMonth()) {
+  <div class="page-heading"><div><h1>Gastos previstos<span>.</span></h1><p>{{ monthTitle() }} · Gestiona los pagos y cobros de este mes.</p></div><a class="button secondary" routerLink="/recurrentes">Gestionar recurrentes</a></div>
+  <app-filters [lockPeriod]="true" [dateRange]="false" [extraFilters]="false" />
+  <div class="planned-totals"><div class="panel"><span>Gastos previstos por pagar</span><strong class="expense-amount">{{ view.money(view.pendingTotals().expenseCents) }}</strong></div><div class="panel"><span>Ingresos previstos por cobrar</span><strong class="income-amount">{{ view.money(view.pendingTotals().incomeCents) }}</strong></div></div>
+  <p class="planned-note">Los previstos cuentan en el balance al confirmar el pago o cobro y permanecen aquí con su estado y su configuración recurrente.</p>
+  @if (dueCount()) { <p class="due-notice" role="status">{{ dueCount() === 1 ? 'Un movimiento ha llegado a su fecha prevista.' : dueCount() + ' movimientos han llegado a su fecha prevista.' }} Confirma el pago o cobro, o indica si no corresponde.</p> }
+  <section class="panel planned-panel" aria-label="Movimientos previstos del mes">
+    <div class="planned-filters"><label>Tipo<select [formControl]="typeControl"><option value="all">Gastos e ingresos</option><option value="expense">Gastos</option><option value="income">Ingresos</option></select></label><label>Buscar previsto<input [formControl]="searchControl" placeholder="Nombre del movimiento" type="search"></label></div>
+    @if (error()) { <p class="field-error" role="alert">{{ error() }}</p> }
+    @for (item of rows(); track item.id) {
+      <article class="planned-row" [class.needs-action]="needsAction(item)" [class.is-confirmed]="confirmed(item)" [attr.aria-label]="item.concept">
+        <span class="recurring-icon" role="img" aria-label="Movimiento recurrente" title="Movimiento recurrente">↻</span>
+        <div class="planned-info"><h2>{{ item.concept }}</h2><p>Fecha prevista: {{ view.date(item.scheduledDate || item.date) }} · {{ view.categoryLabel(item) }}</p><span class="planned-status" [class.is-due]="needsAction(item)" [class.is-paid]="confirmed(item)">{{ status(item) }}</span>@if (confirmed(item)) { <p class="confirmation-date">{{ item.type === 'income' ? 'Cobrado el' : 'Pagado el' }} {{ fullDate(item.date) }}</p> }</div>
+        <strong class="planned-amount" [class.income-amount]="item.type === 'income'" [class.expense-amount]="item.type === 'expense'">{{ view.money(view.displayAmount(item)) }}</strong>
+        @if (recurrence(item); as recurring) {
+          <dl class="planned-details">
+            <div><dt>Inicio de la recurrencia</dt><dd>{{ fullDate(recurring.startDate) }}</dd></div>
+            <div><dt>Fin de la recurrencia</dt><dd>{{ recurring.endDate ? fullDate(recurring.endDate) : 'Sin fecha de fin' }}</dd></div>
+            <div><dt>{{ item.type === 'income' ? 'Días de cobro' : 'Días de pago' }}</dt><dd>{{ recurring.days.join(', ') }} de cada mes</dd></div>
+            <div><dt>Importe recurrente{{ recurring.space === 'shared' ? ' total' : '' }}</dt><dd>{{ view.money(recurring.amountCents) }} por aparición</dd></div>
+            <div><dt>Espacio</dt><dd>{{ item.space === 'shared' ? 'Hogar' : 'Individual' }}</dd></div>
+            <div><dt>{{ item.type === 'income' ? 'Recibe' : 'Paga' }}</dt><dd>{{ item.payment === 'half' ? 'Ambos' : view.name(item.actorId) }}</dd></div>
+            <div><dt>Recurrencia</dt><dd>{{ !recurring.enabled ? 'Pausada' : recurring.endDate && recurring.endDate < planned.today() ? 'Finalizada' : recurring.startDate > planned.today() ? 'Programada' : 'Activa' }}</dd></div>
+          </dl>
+        }
+        @if (item.description) { <p class="planned-description">{{ item.description }}</p> }
+        <div class="planned-actions">
+          @if (confirmed(item)) { <a class="button secondary" [routerLink]="['/movimientos', item.id]" [queryParams]="movementOrigin()">Ver movimiento</a> }
+          @else { <button type="button" class="button" [class.secondary]="!needsAction(item)" [disabled]="!!busy()" (click)="modal.open({ kind: 'movement', value: item, confirmRecurring: true })">{{ item.type === 'income' ? 'Marcar como cobrado' : 'Marcar como pagado' }}</button><button type="button" class="text-link" [disabled]="!!busy()" (click)="skip(item)">{{ busy() === item.id ? 'Guardando…' : 'Omitir esta aparición' }}</button> }
+          @if (recurrence(item); as recurring) { <button type="button" class="text-link" [disabled]="!!busy()" (click)="modal.open({ kind: 'recurring', value: recurring })">Editar recurrencia</button> }
+        </div>
+      </article>
+    } @empty { <div class="empty-state"><span aria-hidden="true">↻</span><h2>{{ view.plannedMovements().length ? 'No hay previstos con estos filtros' : 'No hay movimientos previstos este mes' }}</h2><p>{{ view.plannedMovements().length ? 'Prueba con otro nombre o tipo de movimiento.' : 'Puedes volver al resumen del mes o configurar nuevos recurrentes.' }}</p></div> }
+  </section>
+} @else { <section class="panel empty-state"><h1>Mes no válido</h1><p>Selecciona un mes desde el resumen anual.</p></section> }

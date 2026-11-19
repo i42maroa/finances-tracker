@@ -1,4 +1,4 @@
-﻿:host { display: block; min-height: 100vh; }
+:host { display: block; min-height: 100vh; }
 .app-layout { display: grid; grid-template-columns: 238px 1fr; min-height: 100vh; }
 .sidebar { position: fixed; inset: 0 auto 0 0; width: 238px; padding: 34px 20px 16px; background: var(--color-sidebar); border-right: 1px solid var(--color-border); display: flex; flex-direction: column; overflow-y: auto; overscroll-behavior: contain; z-index: 10; }
 .brand { font-family: Georgia, serif; font-size: 37px; font-weight: 700; letter-spacing: -2px; display: flex; align-items: center; gap: 8px; text-decoration: none; color: var(--color-text); padding: 0 15px; }
@@ -31,9 +31,9 @@ footer { max-width: 1400px; margin: 0 auto; padding: 18px 44px 40px; border-top:
 .initial-loading .brand { margin-bottom: 40px; }
 .movement-actions { display: grid; gap: 7px; margin: 20px 0 0; padding: 20px 0 0; border-top: 1px solid var(--color-border); }
 .actions-label { font-size: 9px; font-weight: 650; letter-spacing: 1.2px; color: var(--color-muted); margin: 0 13px 7px; }
-.movement-actions button, .profile-actions a { display: flex; align-items: center; gap: 12px; border: 0; border-radius: 9px; background: none; padding: 12px 16px; font-size: 12px; text-align: left; text-decoration: none; color: var(--color-primary); }
-.movement-actions button:hover, .profile-actions a:hover, .profile-actions a.active { background: var(--color-primary-soft); }
-.movement-actions button > span, .profile-actions a > span { width: 22px; font-size: 20px; text-align: center; }
+.movement-actions button, .movement-actions a { display: flex; align-items: center; gap: 12px; border: 0; border-radius: 9px; background: none; padding: 12px 16px; font-size: 12px; text-align: left; text-decoration: none; color: var(--color-primary); }
+.movement-actions button:hover, .movement-actions a:hover, .movement-actions a.active { background: var(--color-primary-soft); }
+.movement-actions button > span, .movement-actions a > span { width: 22px; font-size: 20px; text-align: center; }
 .movement-actions button.delete-movement { color: var(--color-danger); }
 .add-movement-fab { position: fixed; right: 30px; bottom: 28px; width: 60px; height: 60px; border: 0; border-radius: 50%; display: grid; place-items: center; background: var(--color-primary); color: var(--color-white); box-shadow: var(--shadow-card); z-index: 15; transition: transform .15s, filter .15s; }
 .add-movement-fab > span { font-size: 36px; line-height: 1; font-weight: 400; }
@@ -88,3 +88,4 @@ footer { max-width: 1400px; margin: 0 auto; padding: 18px 44px 40px; border-top:
   .demo-banner { padding: 8px 18px; font-size: 10px; }
   footer { padding: 18px 18px 25px; font-size: 9px; }
 }
+.planned-reminder{display:flex;align-items:center;gap:16px;padding:18px 20px;margin-bottom:24px;border:1px solid var(--color-primary-border);border-radius:12px;background:var(--color-primary-soft)}.planned-reminder>div{flex:1;min-width:0}.planned-reminder strong{font-size:15px;line-height:1.5}.planned-reminder p{font-size:14px;line-height:1.6;margin:6px 0 0;color:var(--color-muted)}.planned-reminder .button{font-size:14px;white-space:nowrap}.reminder-icon{font-size:26px;color:var(--color-primary)}@media(max-width:700px){.planned-reminder{flex-wrap:wrap;padding:16px;gap:12px}.planned-reminder>div{flex-basis:calc(100% - 40px)}.planned-reminder .button{margin-left:auto}}

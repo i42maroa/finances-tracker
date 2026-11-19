@@ -1,8 +1,9 @@
-import { Injectable, computed, inject } from '@angular/core';
+import { Injectable, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router } from '@angular/router';
 import { filter, map } from 'rxjs';
 import { StoreService } from './store.service';
+import { isConfirmed } from './recurring';
 
 @Injectable({ providedIn: 'root' })
 export class NavigationService {
@@ -14,9 +15,13 @@ export class NavigationService {
   ), { initialValue: this.router.url });
   readonly path = computed(() => this.url().split(/[?#]/)[0]);
   readonly inMonthlySummary = computed(() => /^\/resumen\/\d{4}-\d{2}$/.test(this.path()));
+  readonly inPlanned = computed(() => /^\/resumen\/\d{4}-\d{2}\/previstos$/.test(this.path()));
+  readonly inMonth = computed(() => this.inMonthlySummary() || this.inPlanned());
+  readonly selectedMonth = computed(() => this.inMonth() ? this.path().slice(9, 16) : '');
+  readonly monthContext = signal<{ month: string; queryParams: Record<string, string | number | boolean> }>({ month: '', queryParams: {} });
   readonly inAnnualSummary = computed(() => this.path() === '/');
   readonly summaryYear = computed(() => {
-    if (this.inMonthlySummary()) return Number(this.path().slice(9, 13));
+    if (this.inMonth()) return Number(this.path().slice(9, 13));
     const year = Number(this.router.parseUrl(this.url()).queryParams['year']);
     return this.inAnnualSummary() && Number.isInteger(year) && year >= 1000 && year <= 9999 ? year : new Date().getFullYear();
   });
@@ -36,5 +41,5 @@ export class NavigationService {
     while (route.firstChild) route = route.firstChild;
     return route.routeConfig?.path === 'movimientos/:id' ? route.paramMap.get('id') : null;
   });
-  readonly movement = computed(() => this.store.movements().find(item => item.id === this.movementId()));
+  readonly movement = computed(() => this.store.movements().find(item => item.id === this.movementId() && isConfirmed(item)));
 }

@@ -10,6 +10,7 @@ export class CategoryDetailComponent {
   private router = inject(Router);
   category = this.navigation.category;
   children = computed(() => this.store.categories().filter(item => item.parentId === this.category()?.id && !item.archived));
+  defaultSubcategory = computed(() => this.children().find(item => item.id === this.category()?.defaultSubcategoryId));
   breadcrumbs = computed<BreadcrumbItem[]>(() => [{ label: 'Configuración', link: '/configuracion' }, { label: 'Categorías', link: '/configuracion/categorias' }, { label: this.category()?.name || 'Categoría no disponible' }]);
   constructor() {
     let wasAvailable = false;

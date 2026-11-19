@@ -43,7 +43,7 @@ for (const width of [320, 390, 700, 820, 1024]) {
     const account = await menu.locator('.secondary-menu-footer').boundingBox();
     expect(account!.y).toBeGreaterThan(740 / 2);
     expect(account!.y + account!.height).toBe(740);
-    await expect(menu.getByRole('navigation', { name: 'Navegación del menú' }).getByRole('link')).toHaveText(['◫Resumen', '▦Resumen anual', '⇌Liquidaciones', '⚙Configuración']);
+    await expect(menu.getByRole('navigation', { name: 'Navegación del menú' }).getByRole('link')).toHaveText(['◫Resumen', '▦Resumen anual', '↻Recurrentes', '⇌Liquidaciones', '⚙Configuración']);
     expect(await page.locator('main').boundingBox()).toEqual(structure);
     expect(await page.locator('.sidebar').boundingBox()).toEqual(bottomBar);
     expect(await page.locator('.add-movement-fab').boundingBox()).toEqual(fab);
@@ -99,7 +99,7 @@ for (const width of [320, 390, 700, 820, 1024]) {
     await expect(menu).not.toBeVisible();
     await expect(hamburger).not.toBeVisible();
     await expect(page.getByRole('button', { name: 'Cerrar sesión', exact: true })).toBeVisible();
-    await expect(primary.getByRole('link')).toHaveText(['◫Resumen', '▦Resumen anual', '⇌Liquidaciones', '⚙Configuración']);
+    await expect(primary.getByRole('link')).toHaveText(['◫Resumen', '▦Resumen anual', '↻Recurrentes', '⇌Liquidaciones', '⚙Configuración']);
     await expect(page.locator('.topbar-account')).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.style.overflow)).toBe('');
   });

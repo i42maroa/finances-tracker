@@ -1,4 +1,5 @@
 import { Debt, Movement, Settlement, Summary } from '../models/models';
+import { isConfirmed } from './recurring';
 
 export function eurosToCents(value: string | number): number {
   const text = String(value).trim().replace(',', '.');
@@ -15,6 +16,7 @@ export function share(cents: number, memberIds: string[], uid: string): number {
 export function summarize(movements: Movement[], memberIds: string[], uid?: string, includeShared = true): Summary {
   let incomeCents = 0, expenseCents = 0;
   for (const movement of movements) {
+    if (!isConfirmed(movement)) continue;
     let amount = movement.amountCents;
     if (uid) {
       if (movement.space === 'individual' && movement.ownerId !== uid) continue;
@@ -33,6 +35,7 @@ export function calculateDebt(movements: Movement[], settlements: Settlement[], 
   const [first, second] = memberIds;
   let credit = 0;
   for (const movement of movements) {
+    if (!isConfirmed(movement)) continue;
     if (movement.space !== 'shared') continue;
     const entitlement = share(movement.amountCents, memberIds, first);
     const actual = movement.payment === 'half' && movement.type === 'expense'

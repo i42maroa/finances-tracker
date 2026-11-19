@@ -11,8 +11,10 @@ const summaryEntry: CanActivateFn = route => {
 
 export const routes: Routes = [
   { path: '', pathMatch: 'full', canActivate: [summaryEntry], runGuardsAndResolvers: 'paramsOrQueryParamsChange', providers: [ViewService], loadComponent: () => import('./pages/dashboard/dashboard').then(m => m.DashboardComponent), title: 'Resumen · Hucha' },
+  { path: 'resumen/:month/previstos', providers: [ViewService], loadComponent: () => import('./pages/planned/planned').then(m => m.PlannedComponent), title: 'Gastos previstos · Hucha' },
   { path: 'resumen/:month', providers: [ViewService], data: { monthly: true }, loadComponent: () => import('./pages/dashboard/dashboard').then(m => m.DashboardComponent), title: 'Detalle del mes · Hucha' },
   { path: 'movimientos', pathMatch: 'full', redirectTo: '' },
+  { path: 'recurrentes', providers: [ViewService], loadComponent: () => import('./pages/recurring/recurring').then(m => m.RecurringComponent), title: 'Movimientos recurrentes · Hucha' },
   { path: 'movimientos/:id', providers: [ViewService], loadComponent: () => import('./pages/movement-detail/movement-detail').then(m => m.MovementDetailComponent), title: 'Detalle del movimiento · Hucha' },
   { path: 'liquidaciones', loadComponent: () => import('./pages/settlements/settlements').then(m => m.SettlementsComponent), title: 'Liquidaciones · Hucha' },
   { path: 'perfil', pathMatch: 'full', redirectTo: 'configuracion/perfil' },

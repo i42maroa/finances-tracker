@@ -2,6 +2,8 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { assertFails, assertSucceeds, initializeTestEnvironment, RulesTestEnvironment } from '@firebase/rules-unit-testing';
 import { readFileSync } from 'node:fs';
 import { arrayUnion, collection, deleteDoc, doc, getDoc, getDocs, or, query, where, runTransaction, setDoc, Timestamp, updateDoc, writeBatch } from 'firebase/firestore';
+import { RecurringMovement } from '../src/app/models/models';
+import { recurringSchedule } from '../src/app/services/recurring';
 let env: RulesTestEnvironment;
 const cid = 'couple-test', code = 'ABCDEF0123456789ABCD', now = new Date().toISOString();
 const db = (uid: string) => env.authenticatedContext(uid).firestore();
@@ -29,6 +31,119 @@ function movement(overrides = {}) { return { id: 'm', type: 'expense', amountCen
 beforeAll(async () => { env = await initializeTestEnvironment({ projectId: 'demo-hucha', firestore: { host: '127.0.0.1', port: 8080, rules: readFileSync('firestore.rules', 'utf8') } }); });
 beforeEach(async () => { await env.clearFirestore(); });
 afterAll(async () => { await env.cleanup(); });
+function recurring(overrides: Partial<RecurringMovement> = {}): RecurringMovement {
+  return { id: 'r', type: 'expense', amountCents: 6000, concept: 'Alquiler', description: '', categoryId: 'food', subcategoryId: '', space: 'shared', ownerId: 'a', actorId: 'a', payment: 'single', startDate: '2026-11-01', endDate: '', days: [2, 25], enabled: true, effectiveFrom: '2026-11-01', createdBy: 'a', createdAt: now, updatedAt: now, revision: 1, history: [], ...overrides };
+}
+describe('Recurrencias, historial y confirmación', () => {
+  beforeEach(async () => { await create(); await join(); });
+  it('permite gestionar Hogar a ambos y protege las recurrencias individuales y las consultas', async () => {
+    const ref = doc(db('a'), 'couples', cid, 'recurringMovements', 'r');
+    await assertSucceeds(setDoc(ref, recurring({ space: 'individual' })));
+    await assertSucceeds(getDoc(ref));
+    await assertFails(getDoc(doc(db('b'), 'couples', cid, 'recurringMovements', 'r')));
+    await assertFails(getDoc(doc(db('c'), 'couples', cid, 'recurringMovements', 'r')));
+    await assertFails(updateDoc(doc(db('b'), 'couples', cid, 'recurringMovements', 'r'), { enabled: false }));
+    await assertFails(deleteDoc(ref));
+    const shared = recurring({ id: 'shared' });
+    await assertSucceeds(setDoc(doc(db('a'), 'couples', cid, 'recurringMovements', 'shared'), shared));
+    await assertSucceeds(getDoc(doc(db('b'), 'couples', cid, 'recurringMovements', 'shared')));
+    await assertFails(getDocs(collection(db('b'), 'couples', cid, 'recurringMovements')));
+    const result = await assertSucceeds(getDocs(query(collection(db('b'), 'couples', cid, 'recurringMovements'), or(where('space', '==', 'shared'), where('ownerId', '==', 'b')))));
+    expect(result.docs.map(item => item.id)).toEqual(['shared']);
+  });
+  it('valida calendario, importes, categorías y autoría e impide inventar un historial inicial', async () => {
+    const ref = doc(db('a'), 'couples', cid, 'recurringMovements', 'r');
+    for (const invalid of [{ days: [] }, { days: [0] }, { days: [32] }, { days: [2, 2] }, { days: ['2'] }, { amountCents: 0 }, { endDate: '2026-10-01' }, { type: 'income' }, { categoryId: 'missing' }, { ownerId: 'c' }, { revision: 2 }, { createdBy: 'b' }, { history: [{}] }]) {
+      await assertFails(setDoc(ref, { ...recurring(), ...invalid }));
+    }
+    await assertSucceeds(setDoc(ref, recurring({ days: [1, 15, 31], endDate: '2027-03-01' })));
+  });
+  it('exige conservar las versiones anteriores y detecta ediciones simultáneas', async () => {
+    const original = recurring(), effectiveFrom = '2026-11-19';
+    const ref = doc(db('a'), 'couples', cid, 'recurringMovements', 'r');
+    await setDoc(ref, original);
+    const updated = { ...original, amountCents: 7000, effectiveFrom, revision: 2, history: [{ ...recurringSchedule(original), effectiveUntil: effectiveFrom }] };
+    await assertFails(setDoc(ref, { ...updated, history: [] }));
+    await assertSucceeds(setDoc(doc(db('b'), 'couples', cid, 'recurringMovements', 'r'), updated));
+    await assertFails(setDoc(ref, { ...updated, amountCents: 8000 }));
+    await assertFails(setDoc(ref, { ...updated, space: 'individual', revision: 3, history: [...updated.history, { ...recurringSchedule(updated), effectiveUntil: effectiveFrom }] }));
+    const paused = { ...updated, enabled: false, revision: 3, history: [...updated.history, { ...recurringSchedule(updated), effectiveUntil: effectiveFrom }] };
+    await assertSucceeds(setDoc(ref, paused));
+    await assertFails(setDoc(ref, { ...paused, revision: 4, history: [...paused.history.slice(1), { ...recurringSchedule(paused), effectiveUntil: effectiveFrom }] }));
+  });
+  it('confirma una sola vez aunque ambos miembros intenten hacerlo a la vez', async () => {
+    await setDoc(doc(db('a'), 'couples', cid, 'recurringMovements', 'r'), recurring());
+    const id = 'recurring-r-2026-11-02';
+    const confirm = (uid: string) => {
+      const firestore = db(uid);
+      return runTransaction(firestore, async transaction => {
+        const ref = doc(firestore, 'couples', cid, 'movements', id);
+        if ((await transaction.get(ref)).exists()) return false;
+        transaction.set(ref, movement({ id, recurringId: 'r', scheduledDate: '2026-11-02', status: 'confirmed', createdBy: uid }));
+        return true;
+      });
+    };
+    const results = await Promise.all([confirm('a'), confirm('b')]);
+    expect(results.filter(Boolean)).toHaveLength(1);
+    const ref = doc(db('a'), 'couples', cid, 'movements', id);
+    await assertSucceeds(updateDoc(ref, { date: '2026-11-03', amountCents: 7000 }));
+    await assertFails(updateDoc(ref, { scheduledDate: '2026-11-03' }));
+    await assertFails(updateDoc(ref, { recurringId: 'missing' }));
+    await assertSucceeds(updateDoc(ref, { status: 'skipped' }));
+    await assertFails(deleteDoc(ref));
+  });
+  it('permite adelantar una recurrencia que todavía no había empezado', async () => {
+    const original = recurring({ startDate: '2026-12-01', effectiveFrom: '2026-12-01' });
+    const ref = doc(db('a'), 'couples', cid, 'recurringMovements', 'r');
+    await setDoc(ref, original);
+    await assertSucceeds(setDoc(ref, { ...original, startDate: '2026-11-20', effectiveFrom: '2026-11-19', revision: 2, history: [{ ...recurringSchedule(original), effectiveUntil: '2026-11-19' }] }));
+  });
+  it('no guarda pendientes como realizados ni acepta enlaces a recurrencias ajenas', async () => {
+    await setDoc(doc(db('a'), 'couples', cid, 'recurringMovements', 'r'), recurring());
+    const id = 'recurring-r-2026-11-02', ref = doc(db('a'), 'couples', cid, 'movements', id);
+    const value = movement({ id, recurringId: 'r', scheduledDate: '2026-11-02', status: 'confirmed' });
+    await assertFails(setDoc(ref, { ...value, status: 'pending' }));
+    await assertFails(setDoc(ref, { ...value, recurringId: 'missing' }));
+    await assertFails(setDoc(ref, { ...value, space: 'individual' }));
+    await assertFails(setDoc(doc(db('a'), 'couples', cid, 'movements', 'wrong'), { ...value, id: 'wrong' }));
+    await assertSucceeds(setDoc(ref, { ...value, status: 'skipped' }));
+    await assertFails(setDoc(doc(db('a'), 'couples', cid, 'movements', 'manual'), movement({ id: 'manual', status: 'pending' })));
+  });
+  it('permite confirmar un pendiente histórico aunque se archive su categoría', async () => {
+    await setDoc(doc(db('a'), 'couples', cid, 'recurringMovements', 'r'), recurring());
+    await updateDoc(doc(db('a'), 'couples', cid, 'categories', 'food'), { archived: true });
+    const id = 'recurring-r-2026-11-02';
+    await assertSucceeds(setDoc(doc(db('b'), 'couples', cid, 'movements', id), movement({ id, recurringId: 'r', scheduledDate: '2026-11-02', status: 'confirmed', createdBy: 'b' })));
+  });
+});
+describe('Subcategoría predeterminada', () => {
+  beforeEach(async () => { await create(); await join(); });
+  async function child(id = 'child', parentId = 'food') {
+    const firestore = db('a');
+    if (parentId !== 'food') await setDoc(doc(firestore, 'couples', cid, 'categories', parentId), { id: parentId, name: parentId, type: 'expense', icon: '+', archived: false });
+    await setDoc(doc(firestore, 'couples', cid, 'categories', id), { id, name: id, parentId, type: 'expense', icon: '+', archived: false });
+  }
+  it('valida la pertenencia, el tipo de dato y que sea una subcategoría activa', async () => {
+    await child(); await child('foreign', 'other');
+    const ref = doc(db('a'), 'couples', cid, 'categories', 'food');
+    for (const value of ['missing', 'food', 'foreign', 3, null]) await assertFails(updateDoc(ref, { defaultSubcategoryId: value }));
+    await assertSucceeds(updateDoc(doc(db('b'), 'couples', cid, 'categories', 'food'), { defaultSubcategoryId: 'child' }));
+    await assertFails(updateDoc(doc(db('c'), 'couples', cid, 'categories', 'food'), { defaultSubcategoryId: '' }));
+    await assertFails(updateDoc(doc(db('a'), 'couples', cid, 'categories', 'child'), { defaultSubcategoryId: 'foreign' }));
+    await assertSucceeds(updateDoc(ref, { defaultSubcategoryId: '' }));
+  });
+  it('archiva el valor predeterminado solo si se limpia la referencia en el mismo guardado', async () => {
+    await child();
+    const firestore = db('a'), parent = doc(firestore, 'couples', cid, 'categories', 'food'), selected = doc(firestore, 'couples', cid, 'categories', 'child');
+    await updateDoc(parent, { defaultSubcategoryId: 'child' });
+    await assertFails(updateDoc(selected, { archived: true }));
+    const batch = writeBatch(firestore);
+    batch.update(parent, { defaultSubcategoryId: '' }); batch.update(selected, { archived: true });
+    await assertSucceeds(batch.commit());
+    await assertFails(updateDoc(parent, { defaultSubcategoryId: 'child' }));
+    await assertSucceeds(updateDoc(parent, { name: 'Categoría sin predeterminado' }));
+  });
+});
 describe('Vinculación y acceso', () => {
   it('crea pareja, perfil, invitación y categorías de forma atómica', async () => { await assertSucceeds(create()); await assertSucceeds(getDoc(doc(db('a'), 'couples', cid))); });
   it('vincula al segundo miembro y consume el código', async () => { await create(); await assertSucceeds(join()); expect((await getDoc(doc(db('a'), 'couples', cid))).data()?.['memberIds']).toEqual(['a', 'b']); expect((await getDoc(doc(db('b'), 'invites', code))).exists()).toBe(false); });

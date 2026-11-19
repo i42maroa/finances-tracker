@@ -4,6 +4,7 @@
   <section class="panel movement-detail" aria-label="Datos del movimiento">
     <div class="detail-summary"><span class="detail-icon" [class.income]="item.type === 'income'">{{ category()?.icon || '✧' }}</span><div><span class="detail-type">{{ item.type === 'income' ? 'Ingreso' : 'Gasto' }}</span><div class="detail-amount" [class.income-text]="item.type === 'income'" [class.expense-text]="item.type === 'expense'">{{ item.type === 'income' ? '+' : '−' }}{{ view.money(item.amountCents) }}</div></div></div>
     <dl class="detail-fields">
+      @if (item.recurringId) { <div><dt>Recurrencia</dt><dd><span role="img" aria-label="Movimiento recurrente">↻</span> Movimiento recurrente confirmado</dd></div> }
       <div><dt>Fecha</dt><dd>{{ fullDate(item.date) }}</dd></div>
       <div><dt>Categoría</dt><dd>{{ view.categoryLabel(item) || 'Categoría no disponible' }}{{ category()?.archived ? ' (archivada)' : '' }}</dd></div>
       <div><dt>Espacio</dt><dd>{{ item.space === 'shared' ? 'Hogar' : 'Individual' }}</dd></div>

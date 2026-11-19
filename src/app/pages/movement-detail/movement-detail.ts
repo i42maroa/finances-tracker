@@ -16,10 +16,10 @@ export class MovementDetailComponent {
   private query = toSignal(this.route.queryParamMap, { initialValue: this.route.snapshot.queryParamMap });
   readonly origin = computed(() => {
     const query = this.query(), requestedYear = Number(query.get('year'));
-    const year = query.get('from') === 'summary' && Number.isInteger(requestedYear) && requestedYear >= 1000 && requestedYear <= 9999 ? requestedYear : Number(this.movement()?.date.slice(0, 4) || new Date().getFullYear());
+    const year = ['summary', 'planned'].includes(query.get('from') || '') && Number.isInteger(requestedYear) && requestedYear >= 1000 && requestedYear <= 9999 ? requestedYear : Number(this.movement()?.date.slice(0, 4) || new Date().getFullYear());
     const rawMonth = query.get('month') || '';
     const month = new RegExp(`^${year}-(0[1-9]|1[0-2])$`).test(rawMonth) ? rawMonth : null;
-    return { year, month, filters: { scope: query.get('scope') === 'personal' ? 'personal' : 'shared', type: query.get('type') === 'income' || query.get('type') === 'expense' ? query.get('type')! : 'all', listCategory: query.get('listCategory') || '', listSubcategory: query.get('listSubcategory') || '', name: query.get('name') || '', minCents: query.get('minCents') || '', maxCents: query.get('maxCents') || '', createdBy: query.get('createdBy') || '', sort: query.get('sort') || 'date-desc' } };
+    return { year, month, planned: query.get('from') === 'planned', filters: { scope: query.get('scope') === 'personal' ? 'personal' : 'shared', type: query.get('type') === 'income' || query.get('type') === 'expense' ? query.get('type')! : 'all', listCategory: query.get('listCategory') || '', listSubcategory: query.get('listSubcategory') || '', name: query.get('name') || '', minCents: query.get('minCents') || '', maxCents: query.get('maxCents') || '', createdBy: query.get('createdBy') || '', sort: query.get('sort') || 'date-desc', recurringExpenses: query.get('recurringExpenses') || '' } };
   });
   readonly breadcrumbs = computed<BreadcrumbItem[]>(() => {
     const origin = this.origin();
@@ -28,6 +28,7 @@ export class MovementDetailComponent {
       { label: String(origin.year), link: '/', queryParams: { year: origin.year, ...origin.filters } }
     ];
     if (origin?.month) items.push({ label: new Intl.DateTimeFormat('es-ES', { month: 'long' }).format(new Date(`${origin.month}-01T12:00:00`)), link: `/resumen/${origin.month}`, queryParams: origin.filters });
+    if (origin.planned && origin.month) items.push({ label: 'Gastos previstos', link: `/resumen/${origin.month}/previstos`, queryParams: origin.filters });
     items.push({ label: this.movement()?.concept || 'Movimiento no disponible' });
     return items;
   });
@@ -39,7 +40,7 @@ export class MovementDetailComponent {
       if (this.movement()) {
         wasAvailable = true;
         const origin = this.origin();
-        target = { link: origin.month ? `/resumen/${origin.month}` : '/', queryParams: { year: origin.year, ...origin.filters } };
+        target = { link: origin.month ? `/resumen/${origin.month}${origin.planned ? '/previstos' : ''}` : '/', queryParams: { year: origin.year, ...origin.filters } };
       } else if (wasAvailable && !this.view.store.loading()) void this.router.navigate([target.link], { queryParams: target.queryParams });
     });
   }

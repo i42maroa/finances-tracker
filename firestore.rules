@@ -86,32 +86,95 @@ service cloud.firestore {
           return pid is string && (pid == '' || (pid != id
             && getAfter(/databases/$(database)/documents/couples/$(cid)/categories/$(pid)).data.get('parentId', '') == ''
             && getAfter(/databases/$(database)/documents/couples/$(cid)/categories/$(pid)).data.type == value.type
+            && (!value.archived || getAfter(/databases/$(database)/documents/couples/$(cid)/categories/$(pid)).data.get('defaultSubcategoryId', '') != id)
             && (!getAfter(/databases/$(database)/documents/couples/$(cid)/categories/$(pid)).data.archived || exists(/databases/$(database)/documents/couples/$(cid)/categories/$(id)))));
+        }
+        function validDefault(value) {
+          let sid = value.get('defaultSubcategoryId', '');
+          return sid is string && (sid == '' || (value.get('parentId', '') == '' && sid != id
+            && getAfter(/databases/$(database)/documents/couples/$(cid)/categories/$(sid)).data.get('parentId', '') == id
+            && getAfter(/databases/$(database)/documents/couples/$(cid)/categories/$(sid)).data.type == value.type
+            && !getAfter(/databases/$(database)/documents/couples/$(cid)/categories/$(sid)).data.archived));
         }
         allow read: if member(cid);
         allow create, update: if memberAfter(cid)
-          && request.resource.data.keys().hasOnly(['id', 'name', 'type', 'icon', 'archived', 'parentId'])
-          && validParent(request.resource.data)
+          && request.resource.data.keys().hasOnly(['id', 'name', 'type', 'icon', 'archived', 'parentId', 'defaultSubcategoryId'])
+          && validParent(request.resource.data) && validDefault(request.resource.data)
           && request.resource.data.id == id && text(request.resource.data.name, 40)
           && request.resource.data.type in ['income', 'expense']
           && text(request.resource.data.icon, 4) && request.resource.data.archived is bool
           && (!exists(/databases/$(database)/documents/couples/$(cid)/categories/$(id)) || (resource.data.type == request.resource.data.type && resource.data.get('parentId', '') == request.resource.data.get('parentId', '')));
         allow delete: if false;
       }
+      match /recurringMovements/{id} {
+        function accessible(value) { return value.space == 'shared' || value.ownerId == request.auth.uid; }
+        function snapshot(value, until) {
+          return { 'type': value.type, 'amountCents': value.amountCents, 'concept': value.concept, 'description': value.description,
+            'categoryId': value.categoryId, 'subcategoryId': value.subcategoryId, 'space': value.space,
+            'ownerId': value.ownerId, 'actorId': value.actorId, 'payment': value.payment,
+            'startDate': value.startDate, 'endDate': value.endDate, 'days': value.days, 'enabled': value.enabled,
+            'effectiveFrom': value.effectiveFrom, 'effectiveUntil': until };
+        }
+        function valid() {
+          let value = request.resource.data;
+          let members = get(couplePath(cid)).data.memberIds;
+          let category = getAfter(/databases/$(database)/documents/couples/$(cid)/categories/$(value.categoryId)).data;
+          return value.keys().hasOnly(['id', 'type', 'amountCents', 'concept', 'description', 'categoryId', 'subcategoryId', 'space', 'ownerId', 'actorId', 'payment', 'startDate', 'endDate', 'days', 'enabled', 'effectiveFrom', 'history', 'revision', 'createdBy', 'createdAt', 'updatedAt'])
+            && value.id == id && value.type in ['income', 'expense'] && money(value.amountCents)
+            && text(value.concept, 100) && value.description is string && value.description.size() <= 1000
+            && category.get('parentId', '') == '' && category.type == value.type
+            && (!category.archived || (exists(/databases/$(database)/documents/couples/$(cid)/recurringMovements/$(id)) && resource.data.categoryId == value.categoryId))
+            && value.subcategoryId is string && (value.subcategoryId == '' || (
+              getAfter(/databases/$(database)/documents/couples/$(cid)/categories/$(value.subcategoryId)).data.get('parentId', '') == value.categoryId
+              && getAfter(/databases/$(database)/documents/couples/$(cid)/categories/$(value.subcategoryId)).data.type == value.type
+              && (!getAfter(/databases/$(database)/documents/couples/$(cid)/categories/$(value.subcategoryId)).data.archived || (exists(/databases/$(database)/documents/couples/$(cid)/recurringMovements/$(id)) && resource.data.subcategoryId == value.subcategoryId && resource.data.categoryId == value.categoryId))))
+            && value.space in ['individual', 'shared'] && (value.space != 'shared' || members.size() == 2)
+            && value.ownerId in members && value.actorId in members
+            && value.payment in ['single', 'half'] && (value.payment != 'half' || (value.type == 'expense' && value.space == 'shared'))
+            && (value.type != 'income' || (value.space == 'individual' && value.actorId == value.ownerId))
+            && date(value.startDate) && (value.endDate == '' || (date(value.endDate) && value.endDate >= value.startDate))
+            && date(value.effectiveFrom) && value.enabled is bool
+            && value.days is list && value.days.size() > 0 && value.days.size() <= 31
+            && value.days.hasOnly([1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31])
+            && value.days.toSet().size() == value.days.size()
+            && value.history is list && value.revision is int && metadata(value, cid);
+        }
+        allow get: if member(cid) && (!exists(/databases/$(database)/documents/couples/$(cid)/recurringMovements/$(id)) || accessible(resource.data));
+        allow list: if member(cid) && accessible(resource.data);
+        allow create: if member(cid) && accessible(request.resource.data) && valid()
+          && request.resource.data.createdBy == request.auth.uid && request.resource.data.history.size() == 0
+          && request.resource.data.revision == 1 && request.resource.data.effectiveFrom == request.resource.data.startDate;
+        allow update: if member(cid) && accessible(resource.data) && accessible(request.resource.data) && valid() && immutableMetadata()
+          && request.resource.data.type == resource.data.type && request.resource.data.space == resource.data.space && request.resource.data.ownerId == resource.data.ownerId
+          && (request.resource.data.effectiveFrom >= resource.data.effectiveFrom || (resource.data.history.size() == 0 && resource.data.effectiveFrom == resource.data.startDate))
+          && request.resource.data.revision == resource.data.revision + 1
+          && request.resource.data.history == resource.data.history.concat([snapshot(resource.data, request.resource.data.effectiveFrom)]);
+        allow delete: if false;
+      }
       match /movements/{id} {
+        function validRecurrence(value) {
+          let rid = value.get('recurringId', '');
+          return rid is string && (rid == '' ? !value.keys().hasAny(['recurringId', 'scheduledDate', 'status']) : (
+            text(rid, 100) && date(value.scheduledDate) && id == 'recurring-' + rid + '-' + value.scheduledDate
+            && value.status in ['confirmed', 'skipped']
+            && getAfter(/databases/$(database)/documents/couples/$(cid)/recurringMovements/$(rid)).data.space == value.space
+            && getAfter(/databases/$(database)/documents/couples/$(cid)/recurringMovements/$(rid)).data.ownerId == value.ownerId
+            && getAfter(/databases/$(database)/documents/couples/$(cid)/recurringMovements/$(rid)).data.type == value.type));
+        }
         function validSubcategory(value) {
           let sid = value.get('subcategoryId', '');
           return sid is string && (sid == '' || (
             getAfter(/databases/$(database)/documents/couples/$(cid)/categories/$(sid)).data.get('parentId', '') == value.categoryId
             && getAfter(/databases/$(database)/documents/couples/$(cid)/categories/$(sid)).data.type == value.type
-            && (!getAfter(/databases/$(database)/documents/couples/$(cid)/categories/$(sid)).data.archived || (exists(/databases/$(database)/documents/couples/$(cid)/movements/$(id)) && resource.data.get('subcategoryId', '') == sid && resource.data.categoryId == value.categoryId))));
+            && (!getAfter(/databases/$(database)/documents/couples/$(cid)/categories/$(sid)).data.archived || value.get('recurringId', '') != '' || (exists(/databases/$(database)/documents/couples/$(cid)/movements/$(id)) && resource.data.get('subcategoryId', '') == sid && resource.data.categoryId == value.categoryId))));
         }
         function accessible(value) { return value.space == 'shared' || value.ownerId == request.auth.uid; }
         function valid() {
           let value = request.resource.data;
           let members = get(couplePath(cid)).data.memberIds;
           let category = getAfter(/databases/$(database)/documents/couples/$(cid)/categories/$(value.categoryId)).data;
-          return value.keys().hasOnly(['id', 'type', 'amountCents', 'date', 'concept', 'description', 'categoryId', 'subcategoryId', 'space', 'ownerId', 'actorId', 'payment', 'createdBy', 'createdAt', 'updatedAt'])
+          return value.keys().hasOnly(['id', 'type', 'amountCents', 'date', 'concept', 'description', 'categoryId', 'subcategoryId', 'space', 'ownerId', 'actorId', 'payment', 'createdBy', 'createdAt', 'updatedAt', 'recurringId', 'scheduledDate', 'status'])
+            && validRecurrence(value)
             && category.get('parentId', '') == '' && validSubcategory(value)
             && value.id == id && value.type in ['income', 'expense'] && money(value.amountCents)
             && date(value.date) && text(value.concept, 100)
@@ -123,13 +186,16 @@ service cloud.firestore {
             && (value.payment != 'half' || (value.type == 'expense' && value.space == 'shared'))
             && (value.type != 'income' || value.space == 'shared' || value.actorId == value.ownerId)
             && category.type == value.type
-            && (!category.archived || (exists(/databases/$(database)/documents/couples/$(cid)/movements/$(id)) && resource.data.categoryId == value.categoryId))
+            && (!category.archived || value.get('recurringId', '') != '' || (exists(/databases/$(database)/documents/couples/$(cid)/movements/$(id)) && resource.data.categoryId == value.categoryId))
             && metadata(value, cid);
         }
-        allow read: if member(cid) && accessible(resource.data);
+        allow get: if member(cid) && (!exists(/databases/$(database)/documents/couples/$(cid)/movements/$(id)) || accessible(resource.data));
+        allow list: if member(cid) && accessible(resource.data);
         allow create: if member(cid) && accessible(request.resource.data) && valid() && request.resource.data.createdBy == request.auth.uid;
-        allow update: if member(cid) && accessible(resource.data) && accessible(request.resource.data) && valid() && immutableMetadata();
-        allow delete: if member(cid) && accessible(resource.data);
+        allow update: if member(cid) && accessible(resource.data) && accessible(request.resource.data) && valid() && immutableMetadata()
+          && request.resource.data.get('recurringId', '') == resource.data.get('recurringId', '')
+          && request.resource.data.get('scheduledDate', '') == resource.data.get('scheduledDate', '');
+        allow delete: if member(cid) && accessible(resource.data) && resource.data.get('recurringId', '') == '';
       }
       match /settlements/{id} {
         function valid() {

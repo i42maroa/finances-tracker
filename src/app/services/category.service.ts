@@ -13,12 +13,17 @@ export class CategoryService {
     if (previous && (previous.parentId || '') !== (value.parentId || '')) throw new Error('La categoría general de una subcategoría existente no se puede cambiar.');
     const parent = this.store.categories().find(item => item.id === value.parentId);
     if (value.parentId && (!parent || parent.parentId || parent.type !== value.type || parent.archived && !previous)) throw new Error('Selecciona una categoría general activa del mismo tipo.');
+    if (value.defaultSubcategoryId) {
+      const child = categories.find(item => item.id === value.defaultSubcategoryId);
+      if (value.parentId || !child || child.parentId !== value.id || child.type !== value.type || child.archived) throw new Error('Selecciona una subcategoría activa de esta categoría como predeterminada.');
+    }
     return { ...value, name };
   }
   async save(value: Category): Promise<void> {
     await this.store.save('categories', this.validate(value));
   }
   async saveFamily(value: Category, children: { id: string; name: string; removed: boolean }[]): Promise<void> {
+    if (children.some(child => child.id === value.defaultSubcategoryId && child.removed)) value = { ...value, defaultSubcategoryId: '' };
     const values = [value, ...children.map(child => {
       const previous = this.store.categories().find(item => item.id === child.id && item.parentId === value.id);
       if (!previous) throw new Error('No se encontró la subcategoría.');
@@ -29,6 +34,9 @@ export class CategoryService {
   }
   async archive(id: string): Promise<void> {
     const category = this.store.categories().find(item => item.id === id);
-    if (category) await this.store.save('categories', { ...category, archived: true });
+    if (!category) return;
+    const parent = this.store.categories().find(item => item.id === category.parentId && item.defaultSubcategoryId === id);
+    if (parent) await this.store.saveCategories([{ ...parent, defaultSubcategoryId: '' }, { ...category, archived: true }]);
+    else await this.store.save('categories', { ...category, archived: true });
   }
 }

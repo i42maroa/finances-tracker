@@ -11,15 +11,18 @@ import { eurosToCents, localDate } from '../../services/finance';
 import { errorMessage } from '../../services/errors';
 import { SkeletonComponent } from '../skeleton/skeleton';
 import { ButtonComponent } from '../button/button';
+import { RecurringService } from '../../services/recurring.service';
 
 @Component({ selector: 'app-modal', imports: [ReactiveFormsModule, SkeletonComponent, ButtonComponent], templateUrl: './modal.html', styleUrl: './modal.css' })
 export class ModalComponent implements AfterViewInit {
   @ViewChild('dialog') dialog!: ElementRef<HTMLDialogElement>;
   modal = inject(ModalService); store = inject(StoreService); auth = inject(AuthService);
   private movements = inject(MovementService); private categories = inject(CategoryService);
+  private recurring = inject(RecurringService);
   view = inject(ViewService); private fb = inject(FormBuilder).nonNullable;
   state = this.modal.state()!;
   error = signal('');
+  private suggestedConcept: string | null = null;
   private expenseSpace: Space = this.store.couple()?.memberIds.length === 2 ? this.modal.movementSpace() : 'individual';
   payerControl = this.fb.control(this.auth.user()!.uid, Validators.required);
   movementForm = this.fb.group({
@@ -35,21 +38,35 @@ export class ModalComponent implements AfterViewInit {
     toId: [this.view.balances.debt().toId || this.store.couple()!.memberIds.find(id => id !== this.auth.user()!.uid) || '', Validators.required],
     note: ['', Validators.maxLength(200)]
   });
-  categoryForm = this.fb.group({ name: ['', [Validators.required, Validators.maxLength(40)]], type: this.fb.control<MovementType>('expense'), icon: ['✧', [Validators.required, Validators.maxLength(4)]], parentId: [''] });
-  filtersForm = this.fb.group({ name: ['', Validators.maxLength(100)], minAmount: [''], maxAmount: [''], createdBy: [''] });
+  categoryForm = this.fb.group({ name: ['', [Validators.required, Validators.maxLength(40)]], type: this.fb.control<MovementType>('expense'), icon: ['✧', [Validators.required, Validators.maxLength(4)]], parentId: [''], defaultSubcategoryId: [''] });
+  filtersForm = this.fb.group({ name: ['', Validators.maxLength(100)], minAmount: [''], maxAmount: [''], createdBy: [''], recurringExpenses: false });
+  recurringForm = this.fb.group({ startDate: [localDate(), Validators.required], endDate: [''], days: this.fb.control<number[]>([new Date().getDate()]) });
+  readonly monthDays = Array.from({ length: 31 }, (_, index) => index + 1);
+  toggleDay(day: number): void { const control = this.recurringForm.controls.days; control.setValue(control.value.includes(day) ? control.value.filter(value => value !== day) : [...control.value, day].sort((a, b) => a - b)); }
   categoryChildren = this.fb.array<ReturnType<typeof this.childForm>>([]);
   private childForm(value: { id: string; name: string }) { return this.fb.group({ id: value.id, name: [value.name, [Validators.required, Validators.maxLength(40)]], removed: false }); }
-  removeChild(index: number): void { this.categoryChildren.at(index).controls.removed.setValue(true); this.categoryChildren.at(index).controls.name.clearValidators(); this.categoryChildren.at(index).controls.name.updateValueAndValidity(); }
+  removeChild(index: number): void {
+    const child = this.categoryChildren.at(index);
+    child.controls.removed.setValue(true); child.controls.name.clearValidators(); child.controls.name.updateValueAndValidity();
+    if (this.categoryForm.controls.defaultSubcategoryId.value === child.controls.id.value) this.categoryForm.controls.defaultSubcategoryId.setValue('');
+  }
+  defaultSubcategoryOptions() { return this.categoryChildren.controls.filter(child => !child.controls.removed.value).map(child => child.getRawValue()); }
   constructor() {
     const state = this.state;
     if (state.kind === 'movement-filters') this.filtersForm.patchValue({ ...state.value, minAmount: state.value.minCents === null ? '' : String(state.value.minCents / 100), maxAmount: state.value.maxCents === null ? '' : String(state.value.maxCents / 100) });
-    if (state.kind === 'movement' && state.value) this.movementForm.patchValue({ ...state.value, amount: (state.value.amountCents / 100).toFixed(2) });
-    if (state.kind === 'movement' && state.value) {
+    if ((state.kind === 'movement' || state.kind === 'recurring') && state.value) this.movementForm.patchValue({ ...state.value, amount: (state.value.amountCents / 100).toFixed(2) });
+    if ((state.kind === 'movement' || state.kind === 'recurring') && state.value) {
       if (state.value.type === 'expense') this.expenseSpace = state.value.space;
       this.payerControl.setValue(state.value.payment === 'half' ? '__both__' : state.value.actorId);
       if (state.value.type === 'income') this.movementForm.patchValue({ payment: 'single' });
     }
-    if (state.kind === 'movement' && !state.value) this.movementForm.controls.categoryId.setValue(this.availableCategories()[0]?.id || '');
+    if ((state.kind === 'movement' || state.kind === 'recurring') && !state.value) {
+      this.movementForm.controls.categoryId.setValue(this.availableCategories()[0]?.id || '');
+      this.categoryChanged();
+    }
+    if (state.kind === 'recurring' && state.value) this.recurringForm.patchValue(state.value);
+    if (state.kind === 'recurring' && state.value || state.kind === 'movement' && state.value?.recurringId) this.movementForm.controls.space.disable();
+    if (state.kind === 'movement' && state.confirmRecurring) this.movementForm.controls.date.setValue(localDate());
     if (state.kind === 'settlement') {
       if (state.value) this.settlementForm.patchValue({ ...state.value, amount: (state.value.amountCents / 100).toFixed(2) });
       else if (this.view.balances.debt().amountCents) this.settlementForm.controls.amount.setValue((this.view.balances.debt().amountCents / 100).toFixed(2));
@@ -57,6 +74,7 @@ export class ModalComponent implements AfterViewInit {
     if (state.kind === 'category' && state.value) this.categoryForm.patchValue(state.value);
     if (state.kind === 'category' && state.value && !state.value.parentId) {
       for (const child of this.store.categories().filter(item => item.parentId === state.value!.id && !item.archived)) this.categoryChildren.push(this.childForm(child));
+      if (!this.defaultSubcategoryOptions().some(child => child.id === this.categoryForm.controls.defaultSubcategoryId.value)) this.categoryForm.controls.defaultSubcategoryId.setValue('');
     }
     if (state.kind === 'category' && state.parentId) {
       const parent = this.store.categories().find(item => item.id === state.parentId)!;
@@ -65,22 +83,47 @@ export class ModalComponent implements AfterViewInit {
   }
   ngAfterViewInit(): void { this.dialog.nativeElement.showModal(); }
   get title(): string {
+    if (this.state.kind === 'recurring') return this.state.value ? 'Editar movimiento recurrente' : 'Añadir movimiento recurrente';
+    if (this.state.kind === 'movement' && this.state.confirmRecurring) return this.state.value?.type === 'income' ? 'Confirmar cobro' : 'Confirmar pago';
     if (this.state.kind === 'movement-filters') return 'Filtrar movimientos';
     if (this.state.kind === 'delete') return 'Eliminar registro';
     const noun = this.state.kind === 'movement' ? 'movimiento' : this.state.kind === 'settlement' ? 'liquidación' : this.state.parentId || this.state.value?.parentId ? 'subcategoría' : 'categoría';
     return `${this.state.value ? 'Editar' : 'Añadir'} ${noun}`;
   }
   availableCategories() {
-    const previousId = this.state.kind === 'movement' ? this.state.value?.categoryId : undefined;
-    return this.store.categories().filter(item => !item.parentId && item.type === this.movementForm.controls.type.value && (!item.archived || item.id === previousId));
+    const previousId = this.state.kind === 'movement' || this.state.kind === 'recurring' ? this.state.value?.categoryId : undefined;
+    const categories = this.store.categories().filter(item => !item.parentId && item.type === this.movementForm.controls.type.value && (!item.archived || item.id === previousId));
+    if (this.movementForm.controls.type.value !== 'expense') return categories;
+    const order = ['alimentacion', 'coche', 'compras', 'hogar'];
+    const rank = (name: string) => {
+      const index = order.indexOf(name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLocaleLowerCase('es'));
+      return index < 0 ? order.length : index;
+    };
+    return categories.sort((a, b) => rank(a.name) - rank(b.name));
   }
   availableSubcategories() {
-    const previousId = this.state.kind === 'movement' ? this.state.value?.subcategoryId : undefined;
+    const previousId = this.state.kind === 'movement' || this.state.kind === 'recurring' ? this.state.value?.subcategoryId : undefined;
     return this.store.categories().filter(item => item.parentId === this.movementForm.controls.categoryId.value && (!item.archived || item.id === previousId));
   }
-  categoryChanged(): void { this.movementForm.controls.subcategoryId.setValue(''); }
-  typeChanged(): void { this.categoryChanged(); this.movementForm.controls.categoryId.setValue(this.availableCategories()[0]?.id || ''); }
+  private get canSuggest(): boolean { return (this.state.kind === 'movement' || this.state.kind === 'recurring') && !this.state.value; }
+  nameEdited(): void { this.suggestedConcept = null; }
+  private suggestName(name: string): void {
+    if (!this.canSuggest) return;
+    const control = this.movementForm.controls.concept;
+    if (!control.value.trim() || this.suggestedConcept !== null && control.value === this.suggestedConcept) {
+      control.setValue(name); this.suggestedConcept = name || null;
+    }
+  }
+  categoryChanged(): void {
+    const category = this.store.categories().find(item => item.id === this.movementForm.controls.categoryId.value);
+    const child = this.canSuggest ? this.availableSubcategories().find(item => item.id === category?.defaultSubcategoryId && !item.archived) : undefined;
+    this.movementForm.controls.subcategoryId.setValue(child?.id || '');
+    this.suggestName(child?.name || '');
+  }
+  subcategoryChanged(): void { this.suggestName(this.availableSubcategories().find(item => item.id === this.movementForm.controls.subcategoryId.value)?.name || ''); }
+  typeChanged(): void { this.movementForm.controls.categoryId.setValue(this.availableCategories()[0]?.id || ''); this.categoryChanged(); }
   selectType(type: MovementType): void {
+    if (this.state.kind === 'recurring' && this.state.value || this.state.kind === 'movement' && this.state.value?.recurringId) return;
     if (this.movementForm.controls.type.value !== type) {
       this.movementForm.controls.type.setValue(type);
       this.movementForm.controls.payment.setValue('single');
@@ -109,11 +152,11 @@ export class ModalComponent implements AfterViewInit {
         const parse = (amount: string) => !amount.trim() ? null : /^0([.,]0{1,2})?$/.test(amount.trim()) ? 0 : eurosToCents(amount.trim());
         const minCents = parse(value.minAmount), maxCents = parse(value.maxAmount);
         if (minCents !== null && maxCents !== null && minCents > maxCents) throw new Error('El importe mínimo no puede superar al máximo.');
-        state.apply({ name: value.name.trim(), minCents, maxCents, createdBy: state.showAuthor ? value.createdBy : '', sort: state.value.sort });
+        state.apply({ name: value.name.trim(), minCents, maxCents, createdBy: state.showAuthor ? value.createdBy : '', sort: state.value.sort, recurringExpenses: value.recurringExpenses });
         this.modal.close();
         return;
       }
-      if (state.kind === 'movement') {
+      if (state.kind === 'movement' || state.kind === 'recurring') {
         this.movementForm.markAllAsTouched();
         if (this.movementForm.invalid) throw new Error('Completa todos los campos del movimiento.');
       } else if (state.kind === 'settlement') {
@@ -125,7 +168,7 @@ export class ModalComponent implements AfterViewInit {
         if (this.categoryForm.invalid || this.categoryChildren.invalid) throw new Error('Completa el nombre y el símbolo de la categoría y los nombres de sus subcategorías.');
       }
       this.modal.busy.set(true);
-      if (state.kind === 'movement') {
+      if (state.kind === 'movement' || state.kind === 'recurring') {
         const { amount, ...value } = this.movementForm.getRawValue();
         if (!value.concept.trim()) throw new Error('Escribe un nombre para el movimiento.');
         if (value.type === 'income') {
@@ -134,7 +177,10 @@ export class ModalComponent implements AfterViewInit {
           value.payment = value.space === 'shared' && this.payerControl.value === '__both__' ? 'half' : 'single';
           value.actorId = value.payment === 'half' ? user.uid : this.payerControl.value;
         }
-        await this.movements.save({ ...value, concept: value.concept.trim(), amountCents: eurosToCents(amount), id: state.value?.id || crypto.randomUUID(), createdBy: state.value?.createdBy || user.uid, createdAt: state.value?.createdAt || now, updatedAt: now });
+        const movement = { ...(state.kind === 'movement' ? state.value : {}), ...value, concept: value.concept.trim(), amountCents: eurosToCents(amount), id: state.value?.id || crypto.randomUUID(), createdBy: state.value?.createdBy || user.uid, createdAt: state.value?.createdAt || now, updatedAt: now };
+        if (state.kind === 'recurring') await this.recurring.save({ ...value, description: value.description.trim(), concept: movement.concept, amountCents: movement.amountCents, ...this.recurringForm.getRawValue(), enabled: state.value?.enabled ?? true, effectiveFrom: '' }, state.value);
+        else if (state.confirmRecurring && state.value) await this.recurring.confirm(movement, state.value);
+        else await this.movements.save(movement);
       } else if (state.kind === 'settlement') {
         const { amount, ...value } = this.settlementForm.getRawValue();
         await this.movements.saveSettlement({ ...value, note: value.note.trim(), amountCents: eurosToCents(amount), id: state.value?.id || crypto.randomUUID(), createdBy: state.value?.createdBy || user.uid, createdAt: state.value?.createdAt || now, updatedAt: now });

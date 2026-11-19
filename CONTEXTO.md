@@ -1,5 +1,27 @@
 # Contexto de la aplicación de finanzas en pareja
 
+## Subcategorías predeterminadas al crear movimientos
+
+- Cada categoría general permite elegir una subcategoría activa por defecto desde su editor, o dejar Ninguna. La elección es compartida entre los miembros de la pareja y se muestra en el detalle de la categoría.
+- Al crear un movimiento o una recurrencia, elegir la categoría selecciona su subcategoría por defecto y propone su nombre. Cambiar de subcategoría actualiza el nombre si sigue siendo automático o está vacío. Un nombre escrito manualmente se conserva, incluso si coincide con la sugerencia anterior.
+- Las ediciones de movimientos o recurrencias existentes conservan sus datos y no aplican sugerencias automáticas. Eliminar la subcategoría predeterminada también limpia esa configuración, sin modificar movimientos históricos. Los datos anteriores sin preferencia siguen siendo válidos.
+
+## Ampliación: movimientos recurrentes (19 de noviembre de 2026)
+
+- Confirmar un previsto lo mantiene visible en la página del mes previsto como Pagado o Cobrado. Se muestran fecha prevista, fecha real, inicio y fin de la recurrencia, días de cobro/pago, importe recurrente, espacio y pagador/receptor. Se puede abrir el movimiento confirmado o editar la recurrencia. Los totales pendientes y los avisos excluyen confirmados, y los omitidos siguen ocultos.
+
+- Adelantar la fecha de inicio incorpora las apariciones del período ampliado, aunque su día previsto sea anterior a la fecha de edición. La configuración usada es la de la edición que amplió ese período. Se conservan esos previstos tras nuevas ediciones o pausas y no se duplican los confirmados u omitidos. Ejemplo: Netflix del día 2, corregido desde el 19 al 1 de noviembre, aparece previsto el 2 de noviembre.
+
+- La gestión de pendientes pasa a llamarse Gastos previstos y se abre en una página propia desde las suboperaciones del mes del navbar, tanto en escritorio como en móvil. Breadcrumb: Resumen / año / mes / Gastos previstos. Se elimina el bloque de gestión del resumen. La página conserva la gestión de ingresos previstos y permite buscar y filtrar por tipo.
+- Recurrentes se sitúa encima de Liquidaciones en la navegación principal.
+- A partir del día previsto se muestra un aviso dentro de la aplicación con un enlace para gestionarlo. Incluye atrasados de meses anteriores, prioriza el mes más antiguo y se actualiza al confirmar u omitir. Se revisa la fecha al entrar, volver a la aplicación y cada minuto.
+
+- Se incorpora la página Recurrentes para ingresos y gastos mensuales. Cada configuración indica importe, categoría, espacio, pagador/receptor, fecha de inicio, fin opcional y uno o varios días del mes. Los días inexistentes se ajustan al último día sin duplicar apariciones.
+- Los pendientes se generan al consultar el mes; solo cuentan en balances y deudas después de confirmar el pago/cobro, permitiendo ajustar importe y fecha reales. Se pueden omitir apariciones. Los meses anteriores con pendientes se pueden abrir desde el resumen anual.
+- Los recurrentes se identifican con ↻ y el filtro de movimientos incluye «Solo gastos recurrentes», combinable con los demás y conservado al volver del detalle.
+- Las ediciones, pausas y reanudaciones afectan desde hoy y conservan las versiones anteriores y los movimientos confirmados. Tipo y espacio se conservan en la recurrencia. Omitir o eliminar una aparición no cancela la serie ni vuelve a generarla. Las confirmaciones simultáneas no duplican movimientos.
+- Se mantienen la privacidad individual y la sincronización de Hogar entre ambas cuentas. Esta ampliación sustituye las menciones anteriores a recurrencias pendientes o excluidas del MVP.
+
 Estado: MVP implementado en este repositorio con Angular 22.2.6, Firebase Authentication y Cloud Firestore. Incluye demostración local y pruebas de cálculos, reglas y navegación. La configuración y el despliegue de un proyecto Firebase real quedan pendientes de aportar los datos del proyecto. El modelo de datos, la instalación y la verificación se describen en [README.md](README.md).
 
 Las decisiones vigentes están en las secciones funcionales. El registro final conserva la evolución de la conversación; los acuerdos más recientes sustituyen a los anteriores cuando existe un cambio.

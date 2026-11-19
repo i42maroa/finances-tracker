@@ -4,6 +4,12 @@
   <app-login />
 } @else {
   <ng-template #secondaryActions>
+      @if (navigation.inMonth()) {
+        <div class="movement-actions" role="group" aria-label="Operaciones del mes">
+          <span class="actions-label">ESTE MES</span>
+          <a [routerLink]="['/resumen', navigation.selectedMonth(), 'previstos']" [queryParams]="navigation.monthContext().queryParams" [class.active]="navigation.inPlanned()" [attr.aria-current]="navigation.inPlanned() ? 'page' : null" aria-label="Gastos previstos"><span aria-hidden="true">↻</span> Gastos previstos</a>
+        </div>
+      }
       @if (navigation.inSettings()) {
         <div class="movement-actions profile-actions" role="group" aria-label="Opciones de configuración">
           <span class="actions-label">CONFIGURACIÓN</span>
@@ -63,7 +69,16 @@
           <div class="error-panel" role="alert"><h2>No pudimos cargar vuestro espacio</h2><p>{{ store.error() }}</p><button class="button" (click)="store.retry()">Volver a intentar</button></div>
         } @else if (store.loading()) { <app-skeleton /> }
         @else if (!store.couple() && !navigation.inProfile() && navigation.path() !== '/configuracion' && navigation.path() !== '/configuracion/pareja') { <app-couple /> }
-        @else { <router-outlet /> }
+        @else {
+          @if (planned.notice(); as notice) { @if (!navigation.inPlanned() || notice.month !== navigation.selectedMonth()) {
+            <aside class="planned-reminder" role="status" aria-label="Movimientos previstos por gestionar">
+              <span class="reminder-icon" aria-hidden="true">↻</span>
+              <div><strong>{{ notice.count === 1 ? 'Tienes un movimiento previsto por gestionar' : 'Tienes ' + notice.count + ' movimientos previstos por gestionar' }}</strong><p>La fecha de cobro o pago ya ha llegado. Revisa los previstos de {{ notice.label }}.</p></div>
+              <a class="button secondary" [routerLink]="['/resumen', notice.month, 'previstos']" [queryParams]="{ scope: 'personal' }">Gestionar previstos</a>
+            </aside>
+          } }
+          <router-outlet />
+        }
       </main>
       <footer><span>Hucha · EUR €</span></footer>
       @if (store.couple() && !store.loading() && !store.error() && navigation.canAddMovement()) {
