@@ -1,0 +1,150 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signed() { return request.auth != null; }
+    function couplePath(cid) { return /databases/$(database)/documents/couples/$(cid); }
+    function userPath(uid) { return /databases/$(database)/documents/users/$(uid); }
+    function invitePath(code) { return /databases/$(database)/documents/invites/$(code); }
+    function member(cid) { return signed() && request.auth.uid in get(couplePath(cid)).data.memberIds; }
+    function memberAfter(cid) { return signed() && request.auth.uid in getAfter(couplePath(cid)).data.memberIds; }
+    function text(value, max) { return value is string && value.size() > 0 && value.size() <= max && value.matches('.*\\S.*'); }
+    function date(value) { return value is string && value.matches('[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])'); }
+    function money(value) { return value is int && value > 0 && value <= 100000000; }
+    function metadata(value, cid) {
+      return value.createdBy in getAfter(couplePath(cid)).data.memberIds
+        && text(value.createdAt, 30) && text(value.updatedAt, 30);
+    }
+    function immutableMetadata() {
+      return request.resource.data.createdBy == resource.data.createdBy
+        && request.resource.data.createdAt == resource.data.createdAt;
+    }
+    match /users/{uid} {
+      allow get: if signed() && request.auth.uid == uid;
+      allow list, delete: if false;
+      allow create, update: if signed() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['uid', 'name', 'email', 'coupleId'])
+        && request.resource.data.uid == uid && text(request.resource.data.name, 100)
+        && request.resource.data.email is string && request.resource.data.email.size() <= 320
+        && request.resource.data.coupleId is string
+        && uid in getAfter(couplePath(request.resource.data.coupleId)).data.memberIds
+        && (!exists(userPath(uid)) || resource.data.coupleId == request.resource.data.coupleId);
+    }
+    match /invites/{code} {
+      allow get: if signed();
+      allow list, update: if false;
+      allow create: if signed() && code.matches('[A-F0-9]{20}')
+        && request.resource.data.keys().hasOnly(['coupleId', 'createdBy', 'expiresAt', 'ownerName'])
+        && request.resource.data.createdBy == request.auth.uid
+        && text(request.resource.data.ownerName, 100)
+        && request.resource.data.expiresAt is timestamp
+        && request.resource.data.expiresAt > request.time
+        && request.resource.data.expiresAt <= request.time + duration.value(8, 'd')
+        && getAfter(couplePath(request.resource.data.coupleId)).data.memberIds == [request.auth.uid]
+        && getAfter(couplePath(request.resource.data.coupleId)).data.inviteCode == code;
+      allow delete: if signed() && (
+        (resource.data.createdBy == request.auth.uid && member(resource.data.coupleId))
+        || (resource.data.expiresAt > request.time && memberAfter(resource.data.coupleId)
+          && getAfter(couplePath(resource.data.coupleId)).data.memberIds.size() == 2
+          && getAfter(userPath(request.auth.uid)).data.coupleId == resource.data.coupleId)
+      );
+    }
+    match /couples/{cid} {
+      allow get: if member(cid);
+      allow list, delete: if false;
+      allow create: if signed()
+        && request.resource.data.keys().hasOnly(['memberIds', 'memberNames', 'inviteCode', 'createdAt'])
+        && request.resource.data.memberIds == [request.auth.uid]
+        && request.resource.data.memberNames.keys().hasOnly([request.auth.uid])
+        && text(request.resource.data.memberNames[request.auth.uid], 100)
+        && request.resource.data.inviteCode.matches('[A-F0-9]{20}')
+        && text(request.resource.data.createdAt, 30)
+        && getAfter(userPath(request.auth.uid)).data.coupleId == cid
+        && getAfter(invitePath(request.resource.data.inviteCode)).data.coupleId == cid
+        && getAfter(invitePath(request.resource.data.inviteCode)).data.createdBy == request.auth.uid;
+      allow update: if signed() && (
+        (member(cid) && resource.data.memberIds.size() == 1
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['inviteCode'])
+          && request.resource.data.inviteCode.matches('[A-F0-9]{20}')
+          && getAfter(invitePath(request.resource.data.inviteCode)).data.coupleId == cid
+          && getAfter(invitePath(request.resource.data.inviteCode)).data.createdBy == request.auth.uid
+          && !existsAfter(invitePath(resource.data.inviteCode)))
+        || (!(request.auth.uid in resource.data.memberIds) && resource.data.memberIds.size() == 1
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberIds', 'memberNames'])
+          && request.resource.data.memberIds.size() == 2
+          && request.resource.data.memberIds[0] == resource.data.memberIds[0]
+          && request.resource.data.memberIds[1] == request.auth.uid
+          && request.resource.data.memberNames.diff(resource.data.memberNames).affectedKeys().hasOnly([request.auth.uid])
+          && text(request.resource.data.memberNames[request.auth.uid], 100)
+          && get(invitePath(resource.data.inviteCode)).data.coupleId == cid
+          && get(invitePath(resource.data.inviteCode)).data.expiresAt > request.time
+          && !existsAfter(invitePath(resource.data.inviteCode))
+          && getAfter(userPath(request.auth.uid)).data.coupleId == cid)
+      );
+      match /categories/{id} {
+        function validParent(value) {
+          let pid = value.get('parentId', '');
+          return pid is string && (pid == '' || (pid != id
+            && getAfter(/databases/$(database)/documents/couples/$(cid)/categories/$(pid)).data.get('parentId', '') == ''
+            && getAfter(/databases/$(database)/documents/couples/$(cid)/categories/$(pid)).data.type == value.type
+            && (!getAfter(/databases/$(database)/documents/couples/$(cid)/categories/$(pid)).data.archived || exists(/databases/$(database)/documents/couples/$(cid)/categories/$(id)))));
+        }
+        allow read: if member(cid);
+        allow create, update: if memberAfter(cid)
+          && request.resource.data.keys().hasOnly(['id', 'name', 'type', 'icon', 'archived', 'parentId'])
+          && validParent(request.resource.data)
+          && request.resource.data.id == id && text(request.resource.data.name, 40)
+          && request.resource.data.type in ['income', 'expense']
+          && text(request.resource.data.icon, 4) && request.resource.data.archived is bool
+          && (!exists(/databases/$(database)/documents/couples/$(cid)/categories/$(id)) || (resource.data.type == request.resource.data.type && resource.data.get('parentId', '') == request.resource.data.get('parentId', '')));
+        allow delete: if false;
+      }
+      match /movements/{id} {
+        function validSubcategory(value) {
+          let sid = value.get('subcategoryId', '');
+          return sid is string && (sid == '' || (
+            getAfter(/databases/$(database)/documents/couples/$(cid)/categories/$(sid)).data.get('parentId', '') == value.categoryId
+            && getAfter(/databases/$(database)/documents/couples/$(cid)/categories/$(sid)).data.type == value.type
+            && (!getAfter(/databases/$(database)/documents/couples/$(cid)/categories/$(sid)).data.archived || (exists(/databases/$(database)/documents/couples/$(cid)/movements/$(id)) && resource.data.get('subcategoryId', '') == sid && resource.data.categoryId == value.categoryId))));
+        }
+        function accessible(value) { return value.space == 'shared' || value.ownerId == request.auth.uid; }
+        function valid() {
+          let value = request.resource.data;
+          let members = get(couplePath(cid)).data.memberIds;
+          let category = getAfter(/databases/$(database)/documents/couples/$(cid)/categories/$(value.categoryId)).data;
+          return value.keys().hasOnly(['id', 'type', 'amountCents', 'date', 'concept', 'description', 'categoryId', 'subcategoryId', 'space', 'ownerId', 'actorId', 'payment', 'createdBy', 'createdAt', 'updatedAt'])
+            && category.get('parentId', '') == '' && validSubcategory(value)
+            && value.id == id && value.type in ['income', 'expense'] && money(value.amountCents)
+            && date(value.date) && text(value.concept, 100)
+            && value.get('description', '') is string && value.get('description', '').size() <= 1000
+            && value.ownerId in members && value.actorId in members
+            && value.space in ['individual', 'shared']
+            && (value.space != 'shared' || members.size() == 2)
+            && value.payment in ['single', 'half']
+            && (value.payment != 'half' || (value.type == 'expense' && value.space == 'shared'))
+            && (value.type != 'income' || value.space == 'shared' || value.actorId == value.ownerId)
+            && category.type == value.type
+            && (!category.archived || (exists(/databases/$(database)/documents/couples/$(cid)/movements/$(id)) && resource.data.categoryId == value.categoryId))
+            && metadata(value, cid);
+        }
+        allow read: if member(cid) && accessible(resource.data);
+        allow create: if member(cid) && accessible(request.resource.data) && valid() && request.resource.data.createdBy == request.auth.uid;
+        allow update: if member(cid) && accessible(resource.data) && accessible(request.resource.data) && valid() && immutableMetadata();
+        allow delete: if member(cid) && accessible(resource.data);
+      }
+      match /settlements/{id} {
+        function valid() {
+          let value = request.resource.data;
+          let members = get(couplePath(cid)).data.memberIds;
+          return value.keys().hasOnly(['id', 'amountCents', 'date', 'fromId', 'toId', 'note', 'createdBy', 'createdAt', 'updatedAt'])
+            && value.id == id && members.size() == 2 && money(value.amountCents) && date(value.date)
+            && value.fromId in members && value.toId in members && value.fromId != value.toId
+            && value.note is string && value.note.size() <= 200 && metadata(value, cid);
+        }
+        allow read: if member(cid);
+        allow create: if member(cid) && valid() && request.resource.data.createdBy == request.auth.uid;
+        allow update: if member(cid) && valid() && immutableMetadata();
+        allow delete: if member(cid);
+      }
+    }
+  }
+}

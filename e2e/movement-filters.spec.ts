@@ -1,0 +1,87 @@
+import { test, expect } from '@playwright/test';
+
+for (const width of [1440, 390]) {
+  test(`filtra importes y autor, ordena y marca registros de hoy (${width}px)`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto(`/?year=${new Date().getFullYear()}`); await page.getByRole('button', { name: /Explorar la demostra/ }).click();
+    await expect(page.locator('app-movement-list tbody tr')).toHaveCount(4);
+    await page.evaluate(() => {
+      const data = JSON.parse(localStorage.getItem('hucha-demo-v1')!);
+      const base = data.movements.find((item: { id: string }) => item.id === '2');
+      const now = new Date(), year = now.getFullYear();
+      data.movements = ['A', 'B', 'C', 'D'].map((name, i) => ({ ...base, id: name, concept: `Movimiento ${name}`, amountCents: [1000, 4000, 2000, 3000][i], date: `${year}-01-0${i + 1}`, createdBy: i % 2 ? 'alex' : 'antonio', createdAt: new Date(now.getTime() + (i === 0 ? -86400000 : i === 3 ? 86400000 : 0)).toISOString(), updatedAt: now.toISOString() }));
+      localStorage.setItem('hucha-demo-v1', JSON.stringify(data));
+    });
+    await page.reload(); await page.getByRole('button', { name: /Explorar la demostra/ }).click();
+    await expect(page.locator('app-movement-list tbody tr')).toHaveCount(4);
+    const rows = page.locator('app-movement-list tbody tr');
+    await expect(rows.filter({ hasText: 'Movimiento B' }).locator('.new-badge')).toHaveText('Nuevo');
+    await expect(rows.filter({ hasText: 'Movimiento C' }).locator('.new-badge')).toHaveText('Nuevo');
+    await expect(rows.filter({ hasText: 'Movimiento A' }).locator('.new-badge')).toHaveCount(0);
+    await expect(rows.filter({ hasText: 'Movimiento D' }).locator('.new-badge')).toHaveCount(0);
+    const stats = await page.locator('.stat-value').allTextContents();
+    const months = await page.locator('.months-table').textContent();
+    await page.getByRole('button', { name: 'Filtrar movimientos', exact: true }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByRole('combobox', { name: 'Ordenar por', exact: true })).toHaveCount(0);
+    await dialog.getByLabel('Importe mínimo (€)', { exact: true }).fill('30');
+    await dialog.getByLabel('Importe máximo (€)', { exact: true }).fill('20');
+    await dialog.getByRole('button', { name: 'Aplicar filtros' }).click();
+    await expect(dialog.getByRole('alert')).toContainText('mínimo no puede superar');
+    await expect(rows).toHaveCount(4);
+    await dialog.getByLabel('Importe mínimo (€)', { exact: true }).fill('20,00');
+    await dialog.getByLabel('Importe máximo (€)', { exact: true }).fill('30');
+    await dialog.getByRole('combobox', { name: 'Añadido por', exact: true }).selectOption('alex');
+    await dialog.getByRole('button', { name: 'Aplicar filtros' }).click();
+    await expect(dialog).not.toBeVisible();
+    await page.getByRole('button', { name: 'Ordenar movimientos', exact: true }).click();
+    await page.getByRole('group', { name: 'Orden de movimientos', exact: true }).getByRole('button', { name: 'Importe: de mayor a menor', exact: true }).click();
+    await expect(rows).toHaveCount(1);
+    await expect(page.locator('.movement-link')).toHaveText(['Movimiento D']);
+    await expect(page.locator('.stat-value')).toHaveText(stats);
+    await expect(page.locator('.months-table')).toHaveText(months!);
+    await page.getByRole('link', { name: 'Movimiento D', exact: true }).click();
+    await expect(page).toHaveURL(/minCents=2000/);
+    await page.reload(); await page.getByRole('button', { name: /Explorar la demostra/ }).click();
+    await page.getByRole('navigation', { name: 'Ruta de navegación' }).getByRole('link', { name: String(new Date().getFullYear()), exact: true }).click();
+    await expect(page.locator('.movement-link')).toHaveText(['Movimiento D']);
+    await page.getByRole('button', { name: 'Filtrar movimientos', exact: true }).click();
+    await expect(dialog.getByLabel('Importe mínimo (€)', { exact: true })).toHaveValue('20');
+    await expect(dialog.getByRole('combobox', { name: 'Añadido por', exact: true })).toHaveValue('alex');
+    await dialog.getByLabel('Importe mínimo (€)', { exact: true }).fill('0');
+    await dialog.getByRole('button', { name: 'Cancelar', exact: true }).click();
+    await expect(page.locator('.movement-link')).toHaveText(['Movimiento D']);
+    await page.getByRole('button', { name: 'Quitar filtro de importe', exact: true }).click();
+    await expect(page.locator('.movement-link')).toHaveText(['Movimiento B', 'Movimiento D']);
+    await page.getByRole('button', { name: 'Quitar filtro de añadido por', exact: true }).click();
+    await expect(page.locator('.movement-link')).toHaveText(['Movimiento B', 'Movimiento D', 'Movimiento C', 'Movimiento A']);
+    for (const [sort, names] of [['date-asc', ['A', 'B', 'C', 'D']], ['amount-asc', ['A', 'C', 'D', 'B']], ['date-desc', ['D', 'C', 'B', 'A']]] as const) {
+      const labels = { 'date-asc': 'Fecha: más antiguos primero', 'amount-asc': 'Importe: de menor a mayor', 'date-desc': 'Fecha: más recientes primero' };
+      await page.getByRole('button', { name: 'Ordenar movimientos', exact: true }).click();
+      await page.getByRole('group', { name: 'Orden de movimientos', exact: true }).getByRole('button', { name: labels[sort], exact: true }).click();
+      await expect(page.locator('.movement-sort')).not.toHaveAttribute('open');
+      await expect(page.locator('.movement-link')).toHaveText(names.map(name => `Movimiento ${name}`));
+    }
+    const orderButton = page.getByRole('button', { name: 'Ordenar movimientos', exact: true });
+    await orderButton.click(); await page.keyboard.press('Escape');
+    await expect(page.locator('.movement-sort')).not.toHaveAttribute('open');
+    await orderButton.click(); await page.getByRole('heading', { name: 'Movimientos del año', exact: true }).click();
+    await expect(page.locator('.movement-sort')).not.toHaveAttribute('open');
+    await page.getByRole('button', { name: 'Filtrar movimientos', exact: true }).click();
+    await dialog.getByRole('combobox', { name: 'Añadido por', exact: true }).selectOption('alex');
+    await dialog.getByRole('button', { name: 'Aplicar filtros' }).click();
+    await expect(rows).toHaveCount(2);
+    await page.locator('.scope-switch').getByRole('button', { name: /Individual/ }).click();
+    await expect(rows).toHaveCount(4);
+    await expect(page.getByRole('button', { name: 'Quitar filtro de añadido por', exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Filtrar movimientos', exact: true }).click();
+    await expect(dialog.getByRole('combobox', { name: 'Añadido por', exact: true })).toHaveCount(0);
+    await expect(dialog.getByRole('combobox', { name: 'Ordenar por', exact: true })).toHaveCount(0);
+    await dialog.getByLabel('Importe mínimo (€)', { exact: true }).fill('20');
+    await dialog.getByRole('button', { name: 'Aplicar filtros' }).click();
+    await expect(page.locator('.movement-link')).toHaveText(['Movimiento B']);
+    await orderButton.click();
+    await page.getByRole('group', { name: 'Orden de movimientos', exact: true }).getByRole('button', { name: 'Importe: de menor a mayor', exact: true }).click();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  });
+}

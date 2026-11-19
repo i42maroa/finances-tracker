@@ -1,0 +1,63 @@
+<app-breadcrumb [items]="breadcrumbs()" />
+@if (!monthly || validMonth()) {
+<div class="page-heading"><div><h1>{{ monthly ? monthTitle() : (view.scope() === 'shared' ? 'Hogar' : view.auth.user()?.name) + " " + view.year() }}<span>.</span></h1><p>{{ monthly ? "Ingresos, gastos y movimientos del mes." : "Ingresos, gastos y balance anual." }}</p></div></div>
+<app-filters [lockPeriod]="true" [dateRange]="false" [extraFilters]="false" />
+<section class="summary-grid" aria-label="Resumen del período">
+  <button type="button" class="stat-card" aria-label="Filtrar ingresos" [attr.aria-pressed]="view.listType() === 'income'" (click)="selectSummaryType('income')">
+    <span class="stat-label">Ingresos <span class="stat-icon green" aria-hidden="true">↙</span></span>
+    <span class="stat-value income-amount">{{ view.money(view.summary().incomeCents) }}</span>
+  </button>
+  <button type="button" class="stat-card" aria-label="Filtrar gastos" [attr.aria-pressed]="view.listType() === 'expense'" (click)="selectSummaryType('expense')">
+    <span class="stat-label">Gastos <span class="stat-icon pink" aria-hidden="true">↗</span></span>
+    <span class="stat-value expense-amount">{{ view.money(view.summary().expenseCents) }}</span>
+  </button>
+  <button type="button" class="stat-card net" aria-label="Mostrar ingresos y gastos" [attr.aria-pressed]="view.listType() === 'all'" [class.net-positive]="view.summary().netCents > 0" [class.net-negative]="view.summary().netCents <= 0" (click)="selectSummaryType('all')">
+    <span class="stat-label">Balance del período <span class="stat-icon" aria-hidden="true">≈</span></span>
+    <span class="stat-value" [class.income-amount]="view.summary().netCents > 0" [class.negative-amount]="view.summary().netCents <= 0">{{ view.money(view.summary().netCents) }}</span>
+    <span class="net-decoration" aria-hidden="true">✳</span>
+  </button>
+</section>
+@if (!monthly) {
+<section class="panel months-panel" aria-label="Resumen por meses"><div class="section-heading"><h2>Meses de {{ view.year() }}</h2><label class="year-selector">Año<input aria-label="Año del resumen" type="number" min="1000" max="9999" [formControl]="yearControl" required></label></div>
+@if (view.months().length) {
+<div class="months-scroll"><table class="months-table"><thead><tr><th>Mes</th><th>Ingresos</th><th>Gastos</th><th>Balance</th></tr></thead><tbody>
+@for (row of view.months(); track row.month) { <tr (click)="openMonth(row.month)"><td><a [routerLink]="['/resumen', row.month]" [queryParams]="monthFilters()" (click)="$event.stopPropagation()">{{ row.label }}</a></td><td class="income-amount">{{ view.money(row.incomeCents) }}</td><td class="expense-amount">{{ view.money(row.expenseCents) }}</td><td [class.income-amount]="row.netCents > 0" [class.negative-amount]="row.netCents <= 0">{{ view.money(row.netCents) }}</td></tr> }
+</tbody></table></div>
+} @else { <div class="empty-state"><p>No hay movimientos todavía.</p></div> }
+</section>
+}
+<div class="middle-grid month-detail"><section class="panel categories-panel">
+<div class="section-heading categories-heading"><h2>{{ view.breakdownType() === 'expense' ? 'Gastos por categoría' : 'Ingresos por categoría' }}</h2><div class="chart-controls"><button type="button" class="button secondary" (click)="toggleBreakdown()">{{ view.breakdownType() === 'expense' ? 'Ver ingresos' : 'Ver gastos' }}</button></div></div>
+@if (view.breakdown().length) {
+<div class="category-total">{{ view.money(view.breakdownTotal()) }} <span>{{ view.breakdownType() === 'expense' ? 'en gastos este período' : 'en ingresos este período' }}</span></div>
+<div class="category-visuals" [class.pie-view]="chartMode() === 'pie'">
+@if (chartMode() === 'pie') { <svg class="category-pie" viewBox="0 0 200 200" role="group" [attr.aria-label]="view.breakdownType() === 'expense' ? 'Gráfico de gastos por categoría' : 'Gráfico de ingresos por categoría'">
+@for (slice of pieSlices(); track slice.category?.id) { <path [attr.d]="slice.path" [attr.fill]="slice.color" role="button" tabindex="0" [attr.aria-label]="slice.category?.name + ': ' + view.money(slice.amount) + ' (' + slice.percent + ')'" [attr.aria-pressed]="view.listCategory() === slice.category?.id" (click)="selectCategory(slice.category!.id)" (keydown.enter)="selectCategory(slice.category!.id)" (keydown.space)="$event.preventDefault(); selectCategory(slice.category!.id)"><title>{{ slice.category?.name }}: {{ view.money(slice.amount) }} ({{ slice.percent }})</title></path> }
+</svg> }
+<div class="category-bars">@for (row of view.breakdown(); track row.category?.id) { <div class="category-group"><button type="button" class="category-row" [class.selected]="view.listCategory() === row.category?.id" [attr.aria-expanded]="hasSubcategories(row.category?.id) ? view.listCategory() === row.category?.id : null" [attr.aria-controls]="hasSubcategories(row.category?.id) ? 'subcategories-' + row.category?.id : null" [attr.aria-pressed]="view.listCategory() === row.category?.id" (click)="selectCategory(row.category!.id)"><div><span><span class="category-swatch" [style.background]="chartColors[$index % chartColors.length]"></span>{{ row.category?.icon }} {{ row.category?.name }}</span><strong>{{ view.money(row.amount) }}</strong></div>
+@if (chartMode() === 'bars') { <div class="bar-track"><div [style.width.%]="row.amount / view.breakdownTotal() * 100" [style.background]="chartColors[$index % chartColors.length]"></div></div> } @else { <span class="category-percent">{{ percentage(row.amount) }}</span> }
+</button>
+@if (view.listCategory() === row.category?.id && hasSubcategories(row.category.id)) {
+  <div class="subcategory-breakdown" [id]="'subcategories-' + row.category.id" role="group" [attr.aria-label]="'Subcategorías de ' + row.category.name">
+    @for (child of subcategoryBreakdown().get(row.category!.id) || []; track child.id) {
+      <button type="button" class="subcategory-row" [class.selected]="view.listSubcategory() === child.id" [attr.aria-pressed]="view.listSubcategory() === child.id" (click)="selectSubcategory(child.id)"><span>{{ child.name }}</span><strong>{{ view.money(child.amount) }}</strong></button>
+    } @empty { <p>No hay subcategorías.</p> }
+  </div>
+}
+</div> }</div></div>
+} @else { <div class="small-empty">{{ view.breakdownType() === 'expense' ? 'No hay gastos en este período.' : 'No hay ingresos en este período.' }}</div> }
+<div class="chart-view-switch" role="group" aria-label="Tipo de gráfico"><button type="button" aria-label="Gráfico de barras" [attr.aria-pressed]="chartMode() === 'bars'" (click)="chartMode.set('bars')">Barras</button><button type="button" aria-label="Gráfico de sectores" [attr.aria-pressed]="chartMode() === 'pie'" (click)="chartMode.set('pie')">Sectores</button></div>
+</section></div>
+<section id="summary-movements" class="panel recent-panel"><div class="section-heading"><h2>{{ monthly ? "Movimientos del mes" : "Movimientos del año" }}</h2><div class="movement-list-actions"><button type="button" class="icon-button" (click)="openFilters()" aria-label="Filtrar movimientos" title="Filtrar movimientos"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg></button>
+  <details #sortMenu class="movement-sort" (keydown.escape)="closeSort(); $event.stopPropagation(); sortMenu.querySelector('summary')?.focus()">
+    <summary class="icon-button" role="button" aria-label="Ordenar movimientos" title="Ordenar movimientos"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 6h16M4 12h11M4 18h6M18 11v10m-3-3 3 3 3-3"/></svg></summary>
+    <div class="sort-dropdown" role="group" aria-label="Orden de movimientos">@for (option of sortOptions; track option.value) { <button type="button" [attr.aria-pressed]="view.listSettings().sort === option.value" (click)="setSort(option.value)">{{ option.label }}</button> }</div>
+  </details>
+</div></div>
+@if (view.hasListFilters()) { <div class="active-list-filters">@if (view.listType() !== 'all') { <button type="button" (click)="selectSummaryType('all')" aria-label="Quitar filtro de tipo">{{ view.listType() === 'income' ? 'Ingresos' : 'Gastos' }} ×</button> }@if (view.listCategory()) { <button type="button" (click)="clearCategory()" aria-label="Quitar filtro de categoría">{{ categoryName() }} ×</button> }@if (view.listSubcategory()) { <button type="button" (click)="view.listSubcategory.set('')" aria-label="Quitar filtro de subcategoría">{{ subcategoryName() }} ×</button> }@if (view.listSearch()) { <button type="button" (click)="view.listSearch.set('')" aria-label="Quitar filtro de nombre">Nombre: {{ view.listSearch() }} ×</button> }@if (view.listSettings().minCents !== null || view.listSettings().maxCents !== null) { <button type="button" (click)="clearAmountFilters()" aria-label="Quitar filtro de importe">Importe: {{ view.listSettings().minCents === null ? 'sin mínimo' : view.money(view.listSettings().minCents!) }} – {{ view.listSettings().maxCents === null ? 'sin máximo' : view.money(view.listSettings().maxCents!) }} ×</button> }@if (view.listSettings().createdBy) { <button type="button" (click)="clearAuthorFilter()" aria-label="Quitar filtro de añadido por">Añadido por: {{ view.name(view.listSettings().createdBy) }} ×</button> }</div> }
+<app-movement-list [origin]="movementOrigin()" [rows]="pagedMovements()" />
+<div class="list-count" role="status">{{ view.listMovements().length }}{{ view.hasListFilters() ? " de " + view.filtered().length + " movimientos" : " movimientos en total" }}</div>
+@if (pageCount() > 1) { <nav class="movement-pagination" aria-label="Paginación de movimientos"><button type="button" class="button secondary" [disabled]="currentPage() === 1" (click)="goPage(currentPage() - 1)">Anterior</button><span role="status">Página {{ currentPage() }} de {{ pageCount() }}</span><button type="button" class="button secondary" [disabled]="currentPage() === pageCount()" (click)="goPage(currentPage() + 1)">Siguiente</button></nav> }
+</section>
+
+} @else { <section class="panel empty-state"><h1>Mes no válido</h1><p>Selecciona un mes desde el resumen anual.</p></section> }

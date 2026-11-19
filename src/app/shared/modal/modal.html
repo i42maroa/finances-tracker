@@ -1,0 +1,46 @@
+<dialog #dialog class="modal" aria-labelledby="modal-title" (cancel)="$event.preventDefault()">
+  <div class="modal-heading"><div><h2 id="modal-title">{{ title }}</h2></div><button type="button" class="icon-button close-button" (click)="modal.close()" [disabled]="modal.busy()" aria-label="Cerrar y descartar cambios">×</button></div>
+  @if (modal.busy()) { <app-skeleton /> <p class="saving-label" role="status">Guardando los cambios…</p> }
+  <div [hidden]="modal.busy()">
+  @if (state.kind === 'movement') {
+    <div class="movement-tabs" role="tablist" aria-label="Tipo de movimiento">
+      <button id="movement-tab-expense" type="button" role="tab" aria-controls="movement-panel" [attr.aria-selected]="movementForm.controls.type.value === 'expense'" [attr.tabindex]="movementForm.controls.type.value === 'expense' ? 0 : -1" (click)="selectType('expense')" (keydown.arrowright)="$event.preventDefault(); selectType('income')" (keydown.arrowleft)="$event.preventDefault(); selectType('income')" (keydown.home)="$event.preventDefault(); selectType('expense')" (keydown.end)="$event.preventDefault(); selectType('income')">Gasto</button>
+      <button id="movement-tab-income" type="button" role="tab" aria-controls="movement-panel" [attr.aria-selected]="movementForm.controls.type.value === 'income'" [attr.tabindex]="movementForm.controls.type.value === 'income' ? 0 : -1" (click)="selectType('income')" (keydown.arrowright)="$event.preventDefault(); selectType('expense')" (keydown.arrowleft)="$event.preventDefault(); selectType('expense')" (keydown.home)="$event.preventDefault(); selectType('expense')" (keydown.end)="$event.preventDefault(); selectType('income')">Ingreso</button>
+    </div>
+    <div id="movement-panel" role="tabpanel" [attr.aria-labelledby]="'movement-tab-' + movementForm.controls.type.value">
+    <form id="modal-form" [formGroup]="movementForm" (ngSubmit)="submit()" class="modal-form">
+      <label>Categoría<select formControlName="categoryId" (change)="categoryChanged()" required><option value="" disabled>Selecciona una categoría</option>@for (category of availableCategories(); track category.id) { <option [value]="category.id">{{ category.icon }} {{ category.name }}</option> }</select></label>
+      @if (availableSubcategories().length) { <label>Subcategoría<select formControlName="subcategoryId"><option value="">Sin subcategoría</option>@for (child of availableSubcategories(); track child.id) { <option [value]="child.id">{{ child.name }}{{ child.archived ? ' (archivada)' : '' }}</option> }</select></label> }
+      <label>Nombre<input formControlName="concept" [placeholder]="movementForm.controls.type.value === 'expense' ? 'Nombre del gasto' : 'Nombre del ingreso'" maxlength="100" required></label>
+      <div class="form-row"><label>Importe (€)<input formControlName="amount" inputmode="decimal" placeholder="0,00" maxlength="10" required></label><label>Fecha<input type="date" formControlName="date" required></label></div>
+      @if (movementForm.controls.type.value === 'expense') {
+        <div class="form-row expense-participants"><label>Espacio<select formControlName="space" (change)="spaceChanged()"><option value="shared" [disabled]="store.couple()!.memberIds.length !== 2">Hogar</option><option value="individual">Individual</option></select></label><label>Quién lo paga<select [formControl]="payerControl">@for (id of store.couple()!.memberIds; track id) { <option [value]="id">{{ view.name(id) }}</option> }@if (movementForm.controls.space.value === 'shared' && store.couple()!.memberIds.length === 2) { <option value="__both__">Ambos</option> }</select></label></div>
+      } @else { <label>Quién lo recibe<select formControlName="ownerId">@for (id of movementForm.controls.space.value === 'shared' ? store.couple()!.memberIds : [auth.user()!.uid]; track id) { <option [value]="id">{{ view.name(id) }}</option> }</select></label> }
+      <label>Descripción <span class="optional">(opcional)</span><textarea formControlName="description" placeholder="Detalles del movimiento" maxlength="1000" rows="3"></textarea></label>
+      @if (movementForm.controls.type.value === 'expense' && movementForm.controls.space.value === 'individual') { <label>A quién corresponde el gasto<select formControlName="ownerId">@for (id of [auth.user()!.uid]; track id) { <option [value]="id">{{ view.name(id) }}</option> }</select></label> }
+    </form>
+    </div>
+  } @else if (state.kind === 'movement-filters') {
+    <form id="modal-form" [formGroup]="filtersForm" (ngSubmit)="submit()" class="modal-form"><label>Nombre del movimiento<input formControlName="name" placeholder="Buscar por nombre" maxlength="100" autocomplete="off"></label>
+      <div class="form-row"><label>Importe mínimo (€)<input formControlName="minAmount" inputmode="decimal" placeholder="Sin mínimo" maxlength="10"></label><label>Importe máximo (€)<input formControlName="maxAmount" inputmode="decimal" placeholder="Sin máximo" maxlength="10"></label></div>
+      @if (state.showAuthor) { <label>Añadido por<select formControlName="createdBy"><option value="">Cualquier persona</option>@for (id of store.couple()!.memberIds; track id) { <option [value]="id">{{ view.name(id) }}</option> }</select></label> }
+    </form>
+  } @else if (state.kind === 'settlement') {
+    <form id="modal-form" [formGroup]="settlementForm" (ngSubmit)="submit()" class="modal-form"><div class="form-note">Registra un pago que ya habéis realizado. No se contará como ingreso ni como gasto.</div><div class="form-row"><label>Importe (€)<input formControlName="amount" inputmode="decimal" placeholder="0,00" required></label><label>Fecha<input type="date" formControlName="date" required></label></div><div class="form-row"><label>Quién envía<select formControlName="fromId">@for (id of store.couple()!.memberIds; track id) { <option [value]="id">{{ view.name(id) }}</option> }</select></label><label>Quién recibe<select formControlName="toId">@for (id of store.couple()!.memberIds; track id) { <option [value]="id">{{ view.name(id) }}</option> }</select></label></div><label>Nota <span class="optional">(opcional)</span><textarea formControlName="note" placeholder="Por ejemplo, parte del alquiler" maxlength="200" rows="3"></textarea></label></form>
+  } @else if (state.kind === 'category') {
+    <form id="modal-form" [formGroup]="categoryForm" (ngSubmit)="submit()" class="modal-form"><label>Nombre<input formControlName="name" [placeholder]="state.parentId ? 'Por ejemplo, Luz' : 'Por ejemplo, Mascotas'" maxlength="40" required></label>@if (!state.parentId) { <label>Tipo<select formControlName="type" [attr.aria-disabled]="!!state.value" (change)="state.value && categoryForm.controls.type.setValue(state.value.type)"><option value="expense">Gastos</option><option value="income">Ingresos</option></select></label><label>Símbolo<input formControlName="icon" maxlength="4" placeholder="✧" required></label><div class="form-note">Esta categoría estará disponible para los dos. El tipo de una categoría existente se conserva.</div> }
+      @if (state.value && !state.value.parentId) {
+        <fieldset class="edit-subcategories"><legend>Subcategorías</legend>
+          @for (child of categoryChildren.controls; track child; let i = $index) {
+            @if (!child.controls.removed.value) { <div class="edit-subcategory"><label>Nombre de subcategoría<input [formControl]="child.controls.name" maxlength="40" required></label><button type="button" class="text-link remove-subcategory" (click)="removeChild(i)">Eliminar</button></div> }
+          } @empty { <p>No hay subcategorías todavía.</p> }
+        </fieldset>
+      }
+    </form>
+  } @else {
+    <div class="delete-copy"><p>{{ '¿Eliminar' }} <strong>{{ state.label }}</strong>?</p><p>{{ state.collection === 'categories' ? 'Se conservará en los movimientos existentes y dejará de aparecer al crear otros nuevos.' : 'El registro dejará de contar en los balances. Esta acción no se puede deshacer.' }}</p><form id="modal-form" (submit)="$event.preventDefault(); submit()"></form></div>
+  }
+  @if (error()) { <p class="field-error" role="alert">{{ error() }}</p> }
+  </div>
+  <div class="modal-footer"><button appButton type="button" variant="secondary" (click)="modal.close()" [disabled]="modal.busy()">Cancelar</button><button appButton type="submit" form="modal-form" [variant]="state.kind === 'delete' ? 'danger' : 'primary'" [disabled]="modal.busy()">{{ modal.busy() ? 'Guardando…' : state.kind === 'delete' ? state.collection === 'categories' ? 'Eliminar categoría' : 'Eliminar registro' : state.kind === 'movement-filters' ? 'Aplicar filtros' : 'Guardar' }}</button></div>
+</dialog>

@@ -1,0 +1,1 @@
+:host{touch-action:manipulation}:host:disabled{pointer-events:none}:host:focus-visible{outline:2px solid var(--color-focus);outline-offset:3px}

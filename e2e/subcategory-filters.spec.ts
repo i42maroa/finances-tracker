@@ -1,0 +1,60 @@
+import { test, expect } from '@playwright/test';
+
+for (const width of [1440, 390]) {
+  test(`despliega subcategorías y conserva filtros en el detalle (${width}px)`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto(`/?year=${new Date().getFullYear()}`);
+    await page.getByRole('button', { name: /Explorar la demostra/ }).click();
+    await expect(page.locator('app-movement-list tbody tr')).toHaveCount(4);
+    await page.evaluate(() => {
+      const data = JSON.parse(localStorage.getItem('hucha-demo-v1')!);
+      const base = data.movements.find((item: { id: string }) => item.id === '2');
+      data.movements.push({ ...base, id: 'light', concept: 'Factura de luz', subcategoryId: 'home-sub-2', amountCents: 10000 });
+      data.movements.push({ ...base, id: 'unclassified', concept: 'Gasto sin subcategoría', subcategoryId: '', amountCents: 1000 });
+      localStorage.setItem('hucha-demo-v1', JSON.stringify(data));
+    });
+    await page.reload(); await page.getByRole('button', { name: /Explorar la demostra/ }).click();
+    await expect(page.locator('app-movement-list tbody tr')).toHaveCount(6);
+    const stats = await page.locator('.stat-value').allTextContents();
+    const months = await page.locator('.months-table').textContent();
+    if (width === 390) await page.getByRole('button', { name: 'Gráfico de sectores', exact: true }).click();
+    const parent = page.locator('.category-row').filter({ hasText: 'Hogar' });
+    await expect(parent).toHaveAttribute('aria-expanded', 'false');
+    await parent.click();
+    await expect(parent).toHaveAttribute('aria-expanded', 'true');
+    const children = page.getByRole('group', { name: 'Subcategorías de Hogar', exact: true });
+    await expect(children.getByRole('button')).toHaveCount(3);
+    await expect(children.getByRole('button', { name: /Hipoteca|Agua|Internet/ })).toHaveCount(0);
+    await expect(page.locator('app-movement-list tbody tr')).toHaveCount(3);
+    await children.getByRole('button', { name: /^Luz/ }).click();
+    await expect(page.locator('app-movement-list tbody tr')).toHaveCount(1);
+    await expect(page.getByRole('link', { name: 'Factura de luz', exact: true })).toBeVisible();
+    await expect(page.locator('.stat-value')).toHaveText(stats);
+    await expect(page.locator('.months-table')).toHaveText(months!);
+    await page.getByRole('link', { name: 'Factura de luz', exact: true }).click();
+    await expect(page).toHaveURL(/listSubcategory=home-sub-2/);
+    await page.reload(); await page.getByRole('button', { name: /Explorar la demostra/ }).click();
+    await page.getByRole('navigation', { name: 'Ruta de navegación' }).getByRole('link', { name: String(new Date().getFullYear()), exact: true }).click();
+    await expect(children.getByRole('button', { name: /^Luz/ })).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('app-movement-list tbody tr')).toHaveCount(1);
+    await page.getByRole('button', { name: 'Quitar filtro de subcategoría', exact: true }).click();
+    await expect(page.locator('app-movement-list tbody tr')).toHaveCount(3);
+    await children.getByRole('button', { name: /^Sin subcategoría/ }).click();
+    await expect(page.getByRole('link', { name: 'Gasto sin subcategoría', exact: true })).toBeVisible();
+    await expect(page.locator('app-movement-list tbody tr')).toHaveCount(1);
+    await page.getByRole('button', { name: 'Quitar filtro de categoría', exact: true }).click();
+    await expect(children).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Quitar filtro de subcategoría', exact: true })).toHaveCount(0);
+    await expect(page.locator('app-movement-list tbody tr')).toHaveCount(6);
+    await parent.click(); await parent.click();
+    await expect(children).toHaveCount(0);
+    await page.getByRole('button', { name: 'Ver ingresos', exact: true }).click();
+    const withoutChildren = page.locator('.category-row').first();
+    await withoutChildren.click();
+    await expect(withoutChildren).toHaveAttribute('aria-pressed', 'true');
+    await expect(withoutChildren).not.toHaveAttribute('aria-expanded');
+    await expect(page.locator('.subcategory-breakdown')).toHaveCount(0);
+    await expect(page.locator('app-movement-list tbody tr')).toHaveCount(1);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  });
+}

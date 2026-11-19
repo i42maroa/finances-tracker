@@ -1,0 +1,11 @@
+<form [formGroup]="form" (change)="update()" (input)="update()" class="filters">
+  <div class="scope-switch" aria-label="Espacio"><button type="button" [class.selected]="view.scope() === 'shared'" (click)="setScope('shared')">♡ Hogar</button><button type="button" [class.selected]="view.scope() === 'personal'" (click)="setScope('personal')">◉ Individual</button></div>
+  @if (!lockPeriod()) {
+    @if (view.period() === 'year') { <label class="month-field"><span>Año del resumen</span><input type="number" formControlName="year" min="1000" max="9999" required></label> }
+    @else { <label class="month-field"><span class="sr-only">Mes del resumen</span><input type="month" formControlName="month" required></label> }
+  }
+  @if (extraFilters()) {
+    <details class="extra-filters"><summary>☷ Filtros{{ view.category() || view.from() || view.to() ? ' · activos' : '' }}</summary><div class="filter-popover"><label>Categoría<select formControlName="category"><option value="">Todas las categorías</option>@for (category of view.store.categories(); track category.id) { <option [value]="category.id">{{ category.name }}{{ category.archived ? ' (archivada)' : '' }}</option> }</select></label>@if (dateRange()) { <label>Desde<input type="date" formControlName="from"></label><label>Hasta<input type="date" formControlName="to"></label><small>Las fechas sustituyen los límites del mes.</small> }</div></details>
+  }
+  @if (view.from() && view.to() && view.from() > view.to()) { <p class="field-error">La fecha inicial debe ser anterior a la final.</p> }
+</form>

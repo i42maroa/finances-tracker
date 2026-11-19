@@ -1,0 +1,58 @@
+# Dependencies, builds and local runtimes
+node_modules/
+dist/
+out-tsc/
+.angular/
+.runtime/
+.firebase/
+coverage/
+test-results/
+playwright-report/
+blob-report/
+
+# Local configuration and credentials; commit only templates
+.env*
+!.env.example
+!.env.*.example
+.npmrc
+.firebaserc
+public/firebase-config.json
+public/firebase-config.local.json
+src/environments/*.local.ts
+*serviceAccount*.json
+*service-account*.json
+*firebase-adminsdk*.json
+*.credentials.json
+credentials.json
+.credentials/
+.secrets/
+*.pem
+*.key
+*.p12
+*.pfx
+.aws/
+.ssh/
+
+# Emulator exports and local databases
+firebase-export*/
+firestore_export/
+auth_export/
+backups/
+*.sqlite
+*.sqlite3
+
+# Editor, agent and operating-system files
+.idea/
+.vscode/
+.codex/
+.agents/
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Logs and temporary files
+*.log
+*.tmp
+*.bak
+*.swp
+*~

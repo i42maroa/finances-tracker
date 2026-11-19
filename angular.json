@@ -1,0 +1,54 @@
+{
+  "$schema": "./node_modules/@angular/cli/lib/config/schema.json",
+  "version": 1,
+  "cli": { "analytics": false },
+  "projects": {
+    "hucha": {
+      "projectType": "application",
+      "root": "",
+      "sourceRoot": "src",
+      "architect": {
+        "build": {
+          "builder": "@angular/build:application",
+          "options": {
+            "browser": "src/main.ts",
+            "index": "src/index.html",
+            "tsConfig": "tsconfig.app.json",
+            "assets": [{ "glob": "**/*", "input": "public" }],
+            "styles": ["src/styles.css"],
+            "outputPath": "dist/hucha"
+          },
+          "configurations": {
+            "production": {
+              "outputHashing": "all",
+              "assets": [{ "glob": "**/*", "input": "public", "ignore": ["firebase-config.local.json", "firebase-config.test.json"] }],
+              "budgets": [{ "type": "initial", "maximumWarning": "1MB", "maximumError": "1.2MB" }]
+            },
+            "development": {
+              "optimization": false,
+              "sourceMap": true,
+              "fileReplacements": [{ "replace": "src/environments/environment.ts", "with": "src/environments/environment.development.ts" }],
+              "assets": [{ "glob": "**/*", "input": "public", "ignore": ["firebase-config.json", "firebase-config.test.json"] }]
+            },
+            "testing": {
+              "optimization": false,
+              "sourceMap": true,
+              "fileReplacements": [{ "replace": "src/environments/environment.ts", "with": "src/environments/environment.testing.ts" }],
+              "assets": [{ "glob": "**/*", "input": "public", "ignore": ["firebase-config.json", "firebase-config.local.json"] }]
+            }
+          },
+          "defaultConfiguration": "production"
+        },
+        "serve": {
+          "builder": "@angular/build:dev-server",
+          "configurations": {
+            "production": { "buildTarget": "hucha:build:production" },
+            "development": { "buildTarget": "hucha:build:development" },
+            "testing": { "buildTarget": "hucha:build:testing" }
+          },
+          "defaultConfiguration": "development"
+        }
+      }
+    }
+  }
+}

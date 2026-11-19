@@ -1,0 +1,21 @@
+<app-breadcrumb [items]="breadcrumbs()" />
+@if (movement(); as item) {
+  <div class="page-heading"><div><h1>{{ item.concept }}<span>.</span></h1></div></div>
+  <section class="panel movement-detail" aria-label="Datos del movimiento">
+    <div class="detail-summary"><span class="detail-icon" [class.income]="item.type === 'income'">{{ category()?.icon || '✧' }}</span><div><span class="detail-type">{{ item.type === 'income' ? 'Ingreso' : 'Gasto' }}</span><div class="detail-amount" [class.income-text]="item.type === 'income'" [class.expense-text]="item.type === 'expense'">{{ item.type === 'income' ? '+' : '−' }}{{ view.money(item.amountCents) }}</div></div></div>
+    <dl class="detail-fields">
+      <div><dt>Fecha</dt><dd>{{ fullDate(item.date) }}</dd></div>
+      <div><dt>Categoría</dt><dd>{{ view.categoryLabel(item) || 'Categoría no disponible' }}{{ category()?.archived ? ' (archivada)' : '' }}</dd></div>
+      <div><dt>Espacio</dt><dd>{{ item.space === 'shared' ? 'Hogar' : 'Individual' }}</dd></div>
+      @if (item.space === 'individual') { <div><dt>{{ item.type === 'income' ? 'A quién corresponde el ingreso' : 'A quién corresponde el gasto' }}</dt><dd>{{ view.name(item.ownerId) }}</dd></div> }
+      <div><dt>{{ item.type === 'income' ? 'Quién lo recibe' : 'Quién lo paga' }}</dt><dd>{{ item.payment === 'half' ? 'Ambos, a medias' : view.name(item.actorId) }}</dd></div>
+      <div><dt>Registrado por</dt><dd>{{ view.name(item.createdBy) }}</dd></div>
+    </dl>
+    @if (item.description) { <section class="movement-description" aria-label="Descripción"><h2>Descripción</h2><p>{{ item.description }}</p></section> }
+    @if (item.space === 'shared') {
+      <div class="detail-sharing"><h2>La parte de cada persona</h2>@for (id of view.store.couple()!.memberIds; track id) { <div><span>{{ view.name(id) }}</span><strong>{{ view.money(portion(id)) }}</strong></div> }</div>
+    }
+  </section>
+} @else {
+  <section class="panel empty-state"><span>✧</span><h1>Movimiento no disponible</h1><p>Puede que se haya eliminado o que el enlace no corresponda a un movimiento de vuestra pareja.</p></section>
+}

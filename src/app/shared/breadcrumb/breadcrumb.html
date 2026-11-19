@@ -1,0 +1,8 @@
+<nav aria-label="Ruta de navegación"><ol>
+  @for (item of items(); track $index) {
+    <li>@if (!$first) { <span class="separator" aria-hidden="true">/</span> }
+      @if (item.link) { <a [routerLink]="item.link" [queryParams]="item.queryParams">{{ item.label }}</a> }
+      @else { <span aria-current="page">{{ item.label }}</span> }
+    </li>
+  }
+</ol></nav>

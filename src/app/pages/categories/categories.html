@@ -1,0 +1,9 @@
+<app-breadcrumb [items]="[{ label: 'Configuración', link: '/configuracion' }, { label: 'Categorías' }]" />
+<div class="page-heading"><h1>Categorías<span>.</span></h1><button class="button" (click)="modal.open({ kind: 'category' })">Añadir categoría</button></div>
+<div class="category-groups">@for (group of groups(); track group.type) {
+  <section class="panel"><div class="section-heading"><h2>{{ group.title }}</h2><span class="count-badge">{{ group.categories.length }}</span></div>
+    @for (category of group.categories; track category.id) {
+      <a class="category-family" [routerLink]="['/configuracion/categorias', category.id]" [attr.aria-label]="category.name"><span class="category-symbol" [class.income]="category.type === 'income'" aria-hidden="true">{{ category.icon }}</span><strong class="category-name">{{ category.name }}</strong><span class="category-preview">@for (child of children(category.id); track child.id; let last = $last) { {{ child.name }}{{ last ? '' : ' · ' }} }</span></a>
+    } @empty { <div class="empty-state"><p>No hay categorías todavía.</p></div> }
+  </section>
+}</div>
