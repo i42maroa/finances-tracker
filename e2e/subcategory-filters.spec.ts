@@ -32,6 +32,7 @@ for (const width of [1440, 390]) {
     await expect(page.locator('.stat-value')).toHaveText(stats);
     await expect(page.locator('.months-table')).toHaveText(months!);
     await page.getByRole('link', { name: 'Factura de luz', exact: true }).click();
+    await expect(page.getByRole('region', { name: 'Datos del movimiento', exact: true })).toBeVisible();
     await expect(page).toHaveURL(/listSubcategory=home-sub-2/);
     await page.reload(); await page.getByRole('button', { name: /Explorar la demostra/ }).click();
     await page.getByRole('navigation', { name: 'Ruta de navegación' }).getByRole('link', { name: String(new Date().getFullYear()), exact: true }).click();

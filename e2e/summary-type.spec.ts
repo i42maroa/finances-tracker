@@ -41,6 +41,7 @@ for (const width of [390, 1440]) {
       await expect(page.locator('.stat-value')).toHaveText(stats);
       if (!monthly) await expect(page.locator('.months-table')).toHaveText(months!);
       await page.getByRole('link', { name: 'Venta del mueble del salón', exact: true }).click();
+      await expect(page.getByRole('region', { name: 'Datos del movimiento', exact: true })).toBeVisible();
       await expect(page).toHaveURL(/[?&]type=income/);
       await page.reload();
       await page.getByRole('button', { name: /Explorar la demostra/ }).click();
