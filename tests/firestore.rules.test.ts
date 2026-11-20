@@ -36,6 +36,29 @@ function recurring(overrides: Partial<RecurringMovement> = {}): RecurringMovemen
 }
 describe('Recurrencias, historial y confirmación', () => {
   beforeEach(async () => { await create(); await join(); });
+  it('rechaza días no programados y acepta el último día de febrero bisiesto', async () => {
+    await setDoc(doc(db('a'), 'couples', cid, 'recurringMovements', 'r'), recurring({ startDate: '2024-01-01', effectiveFrom: '2024-01-01', days: [31] }));
+    const save = (date: string) => {
+      const id = `recurring-r-${date}`;
+      return setDoc(doc(db('a'), 'couples', cid, 'movements', id), movement({ id, date, recurringId: 'r', scheduledDate: date, status: 'confirmed' }));
+    };
+    await assertFails(save('2026-11-15'));
+    await assertFails(save('2026-11-31'));
+    await assertFails(save('2026-02-29'));
+    await assertSucceeds(save('2024-02-29'));
+    await assertSucceeds(save('2026-02-28'));
+    await assertSucceeds(save('2026-11-30'));
+  });
+  it('acepta una aparición histórica con la versión vigente en su fecha', async () => {
+    const original = recurring(), effectiveFrom = '2026-11-19';
+    const ref = doc(db('a'), 'couples', cid, 'recurringMovements', 'r');
+    await setDoc(ref, original);
+    await setDoc(ref, { ...original, days: [15], effectiveFrom, revision: 2, history: [{ ...recurringSchedule(original), effectiveUntil: effectiveFrom }] });
+    const id = 'recurring-r-2026-11-02', target = doc(db('a'), 'couples', cid, 'movements', id);
+    const value = movement({ id, recurringId: 'r', scheduledDate: '2026-11-02', status: 'confirmed' });
+    await assertFails(setDoc(target, value));
+    await assertSucceeds(setDoc(target, { ...value, scheduleIndex: 0 }));
+  });
   it('permite gestionar Hogar a ambos y protege las recurrencias individuales y las consultas', async () => {
     const ref = doc(db('a'), 'couples', cid, 'recurringMovements', 'r');
     await assertSucceeds(setDoc(ref, recurring({ space: 'individual' })));
@@ -114,6 +137,19 @@ describe('Recurrencias, historial y confirmación', () => {
     await updateDoc(doc(db('a'), 'couples', cid, 'categories', 'food'), { archived: true });
     const id = 'recurring-r-2026-11-02';
     await assertSucceeds(setDoc(doc(db('b'), 'couples', cid, 'movements', id), movement({ id, recurringId: 'r', scheduledDate: '2026-11-02', status: 'confirmed', createdBy: 'b' })));
+  });
+});
+
+describe('Fechas y revisiones de movimientos', () => {
+  beforeEach(async () => { await create(); await join(); });
+  it('valida el calendario gregoriano en movimientos y exige avanzar la revisión', async () => {
+    const ref = doc(db('a'), 'couples', cid, 'movements', 'm');
+    for (const date of ['2026-11-31', '2026-02-29', '2100-02-29']) await assertFails(setDoc(ref, movement({ date })));
+    await assertSucceeds(setDoc(ref, movement({ date: '2024-02-29', revision: 1 })));
+    await assertFails(updateDoc(ref, { amountCents: 7000 }));
+    await assertSucceeds(updateDoc(ref, { amountCents: 7000, revision: 2 }));
+    await assertFails(updateDoc(ref, { amountCents: 8000, revision: 2 }));
+    await assertFails(setDoc(ref, movement({ date: '2024-02-29' })));
   });
 });
 describe('Subcategoría predeterminada', () => {

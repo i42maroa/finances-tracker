@@ -1,6 +1,7 @@
 import { Injectable, effect, inject, signal, untracked } from '@angular/core';
-import { collection, deleteDoc, doc, onSnapshot, setDoc, Unsubscribe, query, or, where, runTransaction } from 'firebase/firestore';
+import { collection, doc, onSnapshot, Unsubscribe, query, or, where, runTransaction } from 'firebase/firestore';
 import { Category, Couple, HouseholdData, Movement, Settlement, RecurringMovement } from '../models/models';
+import { sameRecord, sameOccurrence, assertUnchanged } from './records';
 import { pendingOccurrences } from './recurring';
 import { AuthService } from './auth.service';
 import { FirebaseService } from './firebase.service';
@@ -21,6 +22,8 @@ export class StoreService {
   private profileUnsubscribe?: Unsubscribe;
   private subscriptions: Unsubscribe[] = [];
   private revision = signal(0);
+  private subscribedCoupleId = '';
+  private sessionKey = '';
   private demoAllMovements: Movement[] = [];
   private demoAllRecurring: RecurringMovement[] = [];
   private canAccess(value: Pick<Movement, 'space' | 'ownerId'>): boolean { return value.space === 'shared' || value.ownerId === this.auth.user()?.uid; }
@@ -28,8 +31,10 @@ export class StoreService {
   constructor() {
     effect(() => {
       const user = this.auth.user(), demo = this.auth.demo();
-      this.revision();
+      const sessionKey = `${user?.uid || ''}:${demo}:${this.revision()}`;
       untracked(() => {
+      if (sessionKey === this.sessionKey) return;
+      this.sessionKey = sessionKey;
       this.profileUnsubscribe?.(); this.clear();
       if (!user) return;
       if (demo) { this.loadDemo(); return; }
@@ -38,8 +43,8 @@ export class StoreService {
       this.loading.set(true);
       this.profileUnsubscribe = onSnapshot(doc(db, 'users', user.uid), snapshot => {
         const coupleId = snapshot.data()?.['coupleId'] as string | undefined;
-        if (coupleId) this.subscribe(coupleId);
-        else { this.clear(); }
+        if (coupleId && coupleId !== this.subscribedCoupleId) this.subscribe(coupleId);
+        else if (!coupleId) { this.clear(); }
       }, error => { this.error.set(errorMessage(error)); this.loading.set(false); });
       });
     });
@@ -49,6 +54,7 @@ export class StoreService {
   }
   retry(): void { this.revision.update(value => value + 1); }
   private clear(): void {
+    this.subscribedCoupleId = '';
     this.subscriptions.forEach(unsubscribe => unsubscribe()); this.subscriptions = [];
     this.couple.set(null); this.categories.set([]); this.movements.set([]); this.settlements.set([]);
     this.recurringMovements.set([]); this.demoAllMovements = []; this.demoAllRecurring = [];
@@ -69,6 +75,7 @@ export class StoreService {
     } catch { this.error.set('No se pudo leer la demostración. Comprueba el almacenamiento del navegador.'); }
   }
   private subscribe(coupleId: string): void {
+    this.subscribedCoupleId = coupleId;
     this.subscriptions.forEach(unsubscribe => unsubscribe()); this.subscriptions = [];
     const db = this.firebase.db!;
     const pending = new Set(['couple', 'categories', 'movements', 'settlements', 'recurringMovements']);
@@ -80,12 +87,15 @@ export class StoreService {
       this.couple.set({ ...snapshot.data(), id: snapshot.id } as Couple); loaded('couple');
     }, failed));
     let categoriesSeeded = false;
-    this.subscriptions.push(onSnapshot(collection(db, 'couples', coupleId, 'categories'), snapshot => {
+    this.subscriptions.push(onSnapshot(collection(db, 'couples', coupleId, 'categories'), { includeMetadataChanges: true }, snapshot => {
       this.categories.set(snapshot.docs.map(item => ({ ...item.data(), id: item.id }) as Category));
       if (!categoriesSeeded) {
+        const present = new Set(snapshot.docs.map(item => item.id));
+        const defaults = defaultCategories().filter(category => !present.has(category.id));
+        if (!defaults.length) { categoriesSeeded = true; loaded('categories'); return; }
+        if (snapshot.metadata.fromCache) { loaded('categories'); return; }
         categoriesSeeded = true;
         void runTransaction(db, async transaction => {
-          const defaults = defaultCategories();
           const refs = defaults.map(category => doc(db, 'couples', coupleId, 'categories', category.id));
           const existing = await Promise.all(refs.map(ref => transaction.get(ref)));
           defaults.forEach((category, index) => { if (!existing[index].exists()) transaction.set(refs[index], category); });
@@ -109,6 +119,7 @@ export class StoreService {
       if ((previous?.revision || 0) !== value.revision - 1) throw new Error('La recurrencia ha cambiado. Vuelve a abrirla antes de guardar.');
     };
     if (this.auth.demo()) {
+      if (sameRecord(this.demoAllRecurring.find(item => item.id === value.id), value)) return;
       check(this.demoAllRecurring.find(item => item.id === value.id));
       const previous = this.recurringMovements();
       this.recurringMovements.set([...previous.filter(item => item.id !== value.id), value]);
@@ -117,6 +128,7 @@ export class StoreService {
       const db = this.firebase.db!, ref = doc(db, 'couples', this.couple()!.id, 'recurringMovements', value.id);
       await runTransaction(db, async transaction => {
         const snapshot = await transaction.get(ref);
+        if (snapshot.exists() && sameRecord(snapshot.data(), value)) return;
         check(snapshot.exists() ? snapshot.data() as RecurringMovement : undefined);
         transaction.set(ref, value);
       });
@@ -129,10 +141,10 @@ export class StoreService {
       const pending = pendingOccurrences([template], [], value.scheduledDate!.slice(0, 7)).find(item => item.id === value.id);
       if (!pending || pending.updatedAt !== value.updatedAt) throw new Error('La recurrencia ha cambiado. Revisa de nuevo el pendiente.');
     };
-    const saved = { ...value, createdBy: this.auth.user()!.uid, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+    const saved = { ...value, revision: 1, createdBy: this.auth.user()!.uid, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
     if (this.auth.demo()) {
       const existing = this.demoAllMovements.find(item => item.id === value.id);
-      if (existing) { if (!this.canAccess(existing)) throw new Error('No tienes acceso a este movimiento.'); return; }
+      if (existing) { if (!this.canAccess(existing)) throw new Error('No tienes acceso a este movimiento.'); if (!sameOccurrence(existing, value)) throw new Error('Otra persona ya ha gestionado este previsto. Revisa su importe y estado antes de continuar.'); return; }
       check(this.recurringMovements().find(item => item.id === value.recurringId));
       await this.save('movements', saved);
     } else {
@@ -140,46 +152,68 @@ export class StoreService {
       const ref = doc(db, 'couples', cid, 'movements', value.id);
       await runTransaction(db, async transaction => {
         const existing = await transaction.get(ref);
-        if (existing.exists()) return;
+        if (existing.exists()) { const actual = existing.data(); if (!sameOccurrence(actual as Movement, value)) throw new Error('Otra persona ya ha gestionado este previsto. Revisa su importe y estado antes de continuar.'); return; }
         const template = await transaction.get(doc(db, 'couples', cid, 'recurringMovements', value.recurringId!));
         check(template.exists() ? template.data() as RecurringMovement : undefined);
         transaction.set(ref, saved);
       });
     }
   }
-  async save(collectionName: 'movements' | 'settlements' | 'categories', value: Movement | Settlement | Category): Promise<void> {
+  async save(collectionName: 'movements' | 'settlements' | 'categories', value: Movement | Settlement | Category, expected: Movement | Settlement | Category | null = null): Promise<void> {
     const couple = this.couple();
     if (!couple) throw new Error('Primero crea o vincula vuestra pareja.');
+    if (sameRecord(value, expected)) return;
+    const next = { ...value, revision: (expected?.revision || 0) + 1 };
     if (this.auth.demo()) {
+      const current = this[collectionName]().find(item => item.id === value.id);
+      if (expected) assertUnchanged(current, expected);
+      else if (current) { if (sameRecord(current, value)) return; throw new Error('El registro ya existe. Vuelve a abrirlo.'); }
       if (collectionName === 'movements') {
         const previous = this.demoAllMovements.find(item => item.id === value.id);
         if (!this.canAccess(value as Movement) || previous && !this.canAccess(previous)) throw new Error('No tienes acceso a este movimiento individual.');
       }
       const state = this[collectionName] as { (): (Movement | Settlement | Category)[]; set(value: (Movement | Settlement | Category)[]): void };
       const previous = state();
-      state.set([...previous.filter(item => item.id !== value.id), value]);
+      state.set([...previous.filter(item => item.id !== value.id), next]);
       try { this.persistDemo(); } catch (error) { state.set(previous); throw error; }
-    } else await setDoc(doc(this.firebase.db!, 'couples', couple.id, collectionName, value.id), value);
+    } else await runTransaction(this.firebase.db!, async transaction => {
+      const ref = doc(this.firebase.db!, 'couples', couple.id, collectionName, value.id);
+      const snapshot = await transaction.get(ref);
+      const current = snapshot.exists() ? snapshot.data() : undefined;
+      if (expected) assertUnchanged(current, expected);
+      else if (current) { if (sameRecord(current, value)) return; throw new Error('El registro ya existe. Vuelve a abrirlo.'); }
+      transaction.set(ref, next);
+    });
   }
-  async saveCategories(values: Category[]): Promise<void> {
+  async saveCategories(values: Category[], expected: Category[] = this.categories()): Promise<void> {
     if (!this.couple()) throw new Error('Primero vincula vuestra pareja.');
+    values = values.filter(value => !sameRecord(value, expected.find(item => item.id === value.id)));
+    if (!values.length) return;
     if (this.auth.demo()) {
+      for (const value of values) assertUnchanged(this.categories().find(item => item.id === value.id), expected.find(item => item.id === value.id));
+      values = values.map(value => ({ ...value, revision: (expected.find(item => item.id === value.id)?.revision || 0) + 1 }));
       const previous = this.categories();
       this.categories.set([...previous.filter(item => !values.some(value => value.id === item.id)), ...values]);
       try { this.persistDemo(); } catch (error) { this.categories.set(previous); throw error; }
     } else {
       const { saveCategoryBatch } = await import('./category-batch');
-      await saveCategoryBatch(this.firebase.db!, this.couple()!.id, values);
+      await saveCategoryBatch(this.firebase.db!, this.couple()!.id, values, expected);
     }
   }
-  async remove(collectionName: 'movements' | 'settlements', id: string): Promise<void> {
+  async remove(collectionName: 'movements' | 'settlements', id: string, expected: Movement | Settlement | undefined = this[collectionName]().find(item=>item.id===id)): Promise<void> {
+    if (expected) assertUnchanged(this[collectionName]().find(item=>item.id===id), expected);
     const occurrence = collectionName === 'movements' ? this.movements().find(item => item.id === id && item.recurringId) : undefined;
-    if (occurrence) { await this.save('movements', { ...occurrence, status: 'skipped', updatedAt: new Date().toISOString() }); return; }
+    if (occurrence) { await this.save('movements', { ...occurrence, status: 'skipped', updatedAt: new Date().toISOString() }, occurrence); return; }
     if (this.auth.demo()) {
       if (collectionName === 'movements' && this.demoAllMovements.some(value => value.id === id && !this.canAccess(value))) throw new Error('No tienes acceso a este movimiento individual.');
       const state = this[collectionName] as { (): (Movement | Settlement)[]; set(value: (Movement | Settlement)[]): void };
       const previous = state(); state.set(previous.filter(item => item.id !== id));
       try { this.persistDemo(); } catch (error) { state.set(previous); throw error; }
-    } else await deleteDoc(doc(this.firebase.db!, 'couples', this.couple()!.id, collectionName, id));
+    } else await runTransaction(this.firebase.db!, async transaction => {
+      const ref = doc(this.firebase.db!, 'couples', this.couple()!.id, collectionName, id);
+      const snapshot = await transaction.get(ref); if (!snapshot.exists()) return;
+      if (expected) assertUnchanged(snapshot.data(), expected);
+      transaction.delete(ref);
+    });
   }
 }

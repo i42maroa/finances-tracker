@@ -2,6 +2,8 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import { StoreService } from './store.service';
 import { AuthService } from './auth.service';
 import { BalanceService } from './balance.service';
+import { rollups } from './rollups';
+import { PlannedService } from './planned.service';
 import { localDate, share } from './finance';
 import { Movement, MovementType, MovementFilters } from '../models/models';
 import { isConfirmed, plannedMonthMovements } from './recurring';
@@ -25,9 +27,10 @@ export class ViewService {
   listSettings = signal<Omit<MovementFilters, 'name'>>({ minCents: null, maxCents: null, createdBy: '', sort: 'date-desc' });
   hasListFilters = computed(() => !!(this.listType() !== 'all' || this.listCategory() || this.listSubcategory() || this.listSearch() || this.listSettings().minCents !== null || this.listSettings().maxCents !== null || this.listSettings().createdBy || this.listSettings().recurringExpenses));
   breakdownType = signal<MovementType>('expense');
+  today = inject(PlannedService).today;
   uid = computed(() => this.auth.user()?.uid || '');
   filtered = computed(() => this.store.movements().filter(item => {
-    if (!isConfirmed(item)) return false;
+    if (!isConfirmed(item) || this.period() === 'year' && item.date.slice(0,7) > this.today().slice(0,7)) return false;
     const from = this.from() || (this.period() === 'year' ? `${this.year()}-01-01` : `${this.month()}-01`);
     const to = this.to() || (this.period() === 'year' ? `${this.year()}-12-31` : `${this.month()}-31`);
     if (item.date < from || item.date > to || this.category() && item.categoryId !== this.category()) return false;
@@ -35,7 +38,8 @@ export class ViewService {
     if (!normalize(item.concept).includes(normalize(this.search().trim()))) return false;
     return this.scope() === 'shared' ? item.space === 'shared' || item.type === 'income' : item.space === 'individual' ? item.ownerId === this.uid() : true;
   }).sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt)));
-  summary = computed(() => this.balances.summary(this.filtered(), this.scope() === 'personal' ? this.uid() : undefined));
+  grouped = computed(() => rollups(this.filtered(), item => this.displayAmount(item)));
+  summary = computed(() => this.grouped().total);
   plannedMovements = computed(() => plannedMonthMovements(this.store.recurringMovements(), this.store.movements(), this.month())
     .filter(item => this.scope() === 'shared' ? item.space === 'shared' : item.space === 'shared' || item.ownerId === this.uid()));
   pending = computed(() => this.plannedMovements().filter(item => !isConfirmed(item)));
@@ -64,25 +68,25 @@ export class ViewService {
       return date;
     });
   });
-  months = computed(() => Array.from({ length: 12 }, (_, index) => {
+  months = computed(() => {
+    const occupied = new Set(this.store.movements().map(item=>item.id));
+    const savedByMonth = new Map<string, Movement[]>();
+    for (const item of this.store.movements()) { const month=(item.scheduledDate||item.date).slice(0,7); if (!savedByMonth.has(month)) savedByMonth.set(month,[]); savedByMonth.get(month)!.push(item); }
+    return Array.from({ length: 12 }, (_, index) => {
     const month = `${this.year()}-${String(index + 1).padStart(2, '0')}`;
-    const planned = plannedMonthMovements(this.store.recurringMovements(), this.store.movements(), month).filter(item => item.space === 'shared' || this.scope() === 'personal' && item.ownerId === this.uid());
+    const planned = plannedMonthMovements(this.store.recurringMovements(), savedByMonth.get(month)||[], month, occupied).filter(item => item.space === 'shared' || this.scope() === 'personal' && item.ownerId === this.uid());
     return {
       month,
       pendingCount: planned.filter(item => !isConfirmed(item)).length,
       hasPlanned: planned.length > 0,
       label: new Intl.DateTimeFormat('es-ES', { month: 'long' }).format(new Date(this.year(), index, 1)),
-      ...this.balances.summary(this.filtered().filter(item => item.date.startsWith(month)), this.scope() === 'personal' ? this.uid() : undefined)
+      ...(this.grouped().months.get(month) || { incomeCents:0, expenseCents:0, netCents:0 })
     };
-  }).filter(row => row.month <= localDate().slice(0, 7) && (row.incomeCents !== 0 || row.expenseCents !== 0 || row.hasPlanned)));
+  }).filter(row => row.month <= this.today().slice(0, 7) && (row.incomeCents !== 0 || row.expenseCents !== 0 || row.hasPlanned));
+  });
   breakdown = computed(() => {
     const categories = this.store.categories();
-    const totals = new Map<string, number>();
-    for (const item of this.filtered()) {
-      if (item.type !== this.breakdownType()) continue;
-      const amount = this.displayAmount(item);
-      totals.set(item.categoryId, (totals.get(item.categoryId) || 0) + amount);
-    }
+    const totals = this.grouped().categories.get(this.breakdownType()) || new Map<string,number>();
     return [...totals].map(([id, amount]) => ({ category: categories.find(item => item.id === id), amount })).filter(row => row.amount > 0).sort((a, b) => b.amount - a.amount);
   });
   breakdownTotal = computed(() => this.breakdown().reduce((total, row) => total + row.amount, 0));

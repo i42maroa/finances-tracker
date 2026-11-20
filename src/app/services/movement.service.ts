@@ -7,9 +7,9 @@ import { validDate } from './recurring';
 export class MovementService {
   private store = inject(StoreService);
   private auth = inject(AuthService);
-  async save(value: Movement): Promise<void> {
+  async save(value: Movement, expected: Movement | null = null): Promise<void> {
     value = this.normalize(value);
-    await this.store.save('movements', value);
+    await this.store.save('movements', value, expected);
   }
   normalize(value: Movement, previous = this.store.movements().find(item => item.id === value.id)): Movement {
     if (previous?.recurringId && (value.recurringId !== previous.recurringId || value.scheduledDate !== previous.scheduledDate || value.type !== previous.type || value.space !== previous.space || value.ownerId !== previous.ownerId)) throw new Error('El tipo y el espacio de este movimiento recurrente se conservan. Puedes ajustar su importe, fecha y demás detalles.');
@@ -34,9 +34,9 @@ export class MovementService {
     if (value.type === 'income' && value.space === 'individual') value = { ...value, actorId: value.ownerId };
     return value;
   }
-  async saveSettlement(value: Settlement): Promise<void> {
+  async saveSettlement(value: Settlement, expected: Settlement | null = null): Promise<void> {
     const members = this.store.couple()?.memberIds || [];
     if (members.length !== 2 || value.fromId === value.toId || !members.includes(value.fromId) || !members.includes(value.toId)) throw new Error('La liquidación debe ser entre los dos miembros de la pareja.');
-    await this.store.save('settlements', value);
+    await this.store.save('settlements', value, expected);
   }
 }

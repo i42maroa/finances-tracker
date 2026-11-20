@@ -34,6 +34,11 @@ export class DashboardComponent {
   private navigation = inject(NavigationService);
   readonly pageSize = 10;
   readonly page = signal(1);
+  private writtenQuery = '';
+  private queryKey(value: Record<string, unknown>): string {
+    return JSON.stringify(Object.entries(value).filter(([, value]) => value !== undefined && value !== null && value !== '')
+      .map(([key, value]) => [key, String(value)]).sort(([a], [b]) => a.localeCompare(b)));
+  }
   readonly pageCount = computed(() => Math.max(1, Math.ceil(this.view.listMovements().length / this.pageSize)));
   readonly currentPage = computed(() => Math.min(this.page(), this.pageCount()));
   readonly pagedMovements = computed(() => this.view.listMovements().slice((this.currentPage() - 1) * this.pageSize, this.currentPage() * this.pageSize));
@@ -56,15 +61,11 @@ export class DashboardComponent {
   });
   readonly subcategoryBreakdown = computed(() => {
     const result = new Map<string, { id: string; name: string; amount: number }[]>();
-    const movements = this.view.filtered().filter(item => item.type === this.view.breakdownType());
+    const groups = this.view.grouped().children.get(this.view.breakdownType());
     for (const row of this.view.breakdown()) {
       const id = row.category?.id;
       if (!id) continue;
-      const totals = new Map<string, number>();
-      for (const item of movements.filter(item => item.categoryId === id)) {
-        const key = item.subcategoryId || '__none__';
-        totals.set(key, (totals.get(key) || 0) + this.view.displayAmount(item));
-      }
+      const totals = groups?.get(id) || new Map<string,number>();
       const children = this.view.store.categories().filter(child => child.parentId === id && totals.has(child.id)).map(child => ({ id: child.id, name: child.name, amount: totals.get(child.id) || 0 }));
       if (children.length && totals.has('__none__')) children.push({ id: '__none__', name: 'Sin subcategoría', amount: totals.get('__none__')! });
       result.set(id, children);
@@ -113,7 +114,10 @@ export class DashboardComponent {
     this.restoreListSettings(query);
     effect(() => { if (this.monthly && this.validMonth()) this.view.month.set(this.selectedMonth()); });
     effect(() => {
-      const year = Number(this.queryParams().get('year'));
+      const incoming = this.queryParams();
+      if (this.queryKey(Object.fromEntries(incoming.keys.map(key => [key, incoming.get(key)]))) === this.writtenQuery) return;
+      untracked(() => {
+      const year = Number(incoming.get('year'));
       if (!this.monthly && Number.isInteger(year) && year >= 1000 && year <= 9999) {
         this.view.year.set(year);
         this.yearControl.setValue(year, { emitEvent: false });
@@ -126,10 +130,23 @@ export class DashboardComponent {
         this.view.listSearch.set(query.get('name') || '');
         this.restoreListSettings(query);
       }
+      if (this.monthly) { this.view.scope.set(incoming.get('scope') === 'personal' ? 'personal' : 'shared'); this.view.listCategory.set(incoming.get('listCategory')||''); this.view.listSubcategory.set(incoming.get('listSubcategory')||''); this.view.listSearch.set(incoming.get('name')||''); this.restoreListSettings(incoming); }
+      const chart=incoming.get('chart'); if(chart==='lines'&&!this.monthly||chart==='pie'||chart==='bars') this.chartMode.set(chart as 'lines'|'pie'|'bars');
+      });
+    });
+    effect(() => {
+      const settings=this.view.listSettings();
+      const desired: Record<string,unknown> = { year:this.monthly?undefined:this.view.year(), scope:this.view.scope()==='shared'?undefined:'personal', type:this.view.listType()==='all'?undefined:this.view.listType(), breakdown:this.view.breakdownType()==='expense'?undefined:'income', listCategory:this.view.listCategory()||undefined, listSubcategory:this.view.listSubcategory()||undefined, name:this.view.listSearch()||undefined, minCents:settings.minCents??undefined, maxCents:settings.maxCents??undefined, createdBy:settings.createdBy||undefined, sort:settings.sort==='date-desc'?undefined:settings.sort, recurringExpenses:settings.recurringExpenses?'1':undefined, chart:this.chartMode()==='bars'?undefined:this.chartMode() };
+      untracked(() => {
+        const actual=this.route.snapshot.queryParams;
+        if(this.queryKey(actual)===this.queryKey(desired))return;
+        this.writtenQuery=this.queryKey(desired);
+        void this.router.navigate([], { relativeTo:this.route, queryParams:desired, replaceUrl:true });
+      });
     });
   }
   monthFilters() { return { scope: this.view.scope(), type: this.view.listType() }; }
-  movementOrigin() { return { from: 'summary', year: this.monthly ? Number(this.selectedMonth().slice(0, 4)) : this.view.year(), month: this.monthly ? this.selectedMonth() : '', ...this.monthFilters(), listCategory: this.view.listCategory(), listSubcategory: this.view.listSubcategory(), name: this.view.listSearch(), minCents: this.view.listSettings().minCents ?? '', maxCents: this.view.listSettings().maxCents ?? '', createdBy: this.view.listSettings().createdBy, sort: this.view.listSettings().sort, recurringExpenses: this.view.listSettings().recurringExpenses ? '1' : '' }; }
+  movementOrigin() { return { from: 'summary', chart: this.chartMode(), breakdown: this.view.breakdownType(), year: this.monthly ? Number(this.selectedMonth().slice(0, 4)) : this.view.year(), month: this.monthly ? this.selectedMonth() : '', ...this.monthFilters(), listCategory: this.view.listCategory(), listSubcategory: this.view.listSubcategory(), name: this.view.listSearch(), minCents: this.view.listSettings().minCents ?? '', maxCents: this.view.listSettings().maxCents ?? '', createdBy: this.view.listSettings().createdBy, sort: this.view.listSettings().sort, recurringExpenses: this.view.listSettings().recurringExpenses ? '1' : '' }; }
   categoryName() { return this.view.store.categories().find(item => item.id === this.view.listCategory())?.name || this.view.listCategory(); }
   selectSummaryType(type: MovementType | 'all'): void {
     this.view.listType.set(type);
@@ -157,7 +174,8 @@ export class DashboardComponent {
   restoreListSettings(query: { get(name: string): string | null }): void {
     const type = query.get('type');
     this.view.listType.set(type === 'income' || type === 'expense' ? type : 'all');
-    this.view.breakdownType.set(type === 'income' || type === 'expense' ? type : untracked(() => this.view.store.categories().find(item => item.id === this.view.listCategory())?.type || 'expense'));
+    const breakdown = query.get('breakdown');
+    this.view.breakdownType.set(breakdown === 'income' || breakdown === 'expense' ? breakdown : type === 'income' || type === 'expense' ? type : untracked(() => this.view.store.categories().find(item => item.id === this.view.listCategory())?.type || 'expense'));
     const bound = (name: string) => { const raw = query.get(name); const value = Number(raw); return raw !== null && raw !== '' && Number.isInteger(value) && value >= 0 && value <= 100000000 ? value : null; };
     const sort = query.get('sort');
     this.view.listSettings.set({ minCents: bound('minCents'), maxCents: bound('maxCents'), createdBy: untracked(() => this.view.scope()) === 'shared' ? query.get('createdBy') || '' : '', sort: ['date-asc', 'amount-asc', 'amount-desc'].includes(sort || '') ? sort as MovementSort : 'date-desc', recurringExpenses: query.get('recurringExpenses') === '1' });

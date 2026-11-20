@@ -373,6 +373,8 @@ Estos puntos se resolverán cuando se prepare cada etapa; no amplían por sí mi
 
 ## Registro de acuerdos
 
+- Mejora futura (20 de noviembre de 2026): conectar Hucha con conversaciones de ChatGPT mediante un servidor MCP autenticado. Primera fase propuesta: consultar resúmenes, categorías, movimientos y recurrentes pendientes, respetando los permisos de cada persona. El registro de movimientos desde el chat se valorará después. Queda pendiente, sin implementación ni cambios de alojamiento o facturación autorizados; Firebase se mantiene en Spark.
+
 - Primera conversación: se confirman el objetivo de gestionar finanzas individuales y comunes, la clasificación para seguimiento y el desarrollo progresivo.
 - Segunda conversación: se confirma que los movimientos serán ingresos y gastos, que ambos tendrán categorías, que la privacidad será configurable y que un gasto común podrá pagarlo una persona o ambas al 50/50. El reparto del coste y los detalles de privacidad y clasificación siguen pendientes.
 - Tercera conversación: se confirma el balance de deudas para gastos compartidos, que los gastos no compartidos serán individuales, la organización de la privacidad por espacios y una categoría personalizable por movimiento para empezar. Se solicita poder tener tanto gastos individuales privados como individuales visibles para ambos.

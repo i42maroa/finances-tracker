@@ -21,6 +21,10 @@ export class ModalComponent implements AfterViewInit {
   private recurring = inject(RecurringService);
   view = inject(ViewService); private fb = inject(FormBuilder).nonNullable;
   state = this.modal.state()!;
+  private readonly draftId = crypto.randomUUID();
+  private readonly draftCreatedAt = new Date().toISOString();
+  private readonly deletionBaseline = this.state.kind === 'delete' && this.state.collection !== 'categories' ? this.store[this.state.collection]().find(item => item.id === (this.state as any).id) : undefined;
+  private readonly categoryBaseline = this.store.categories().map(item => ({ ...item }));
   error = signal('');
   private suggestedConcept: string | null = null;
   private expenseSpace: Space = this.store.couple()?.memberIds.length === 2 ? this.modal.movementSpace() : 'individual';
@@ -175,21 +179,21 @@ export class ModalComponent implements AfterViewInit {
           value.payment = 'single'; value.actorId = value.ownerId;
         } else {
           value.payment = value.space === 'shared' && this.payerControl.value === '__both__' ? 'half' : 'single';
-          value.actorId = value.payment === 'half' ? user.uid : this.payerControl.value;
+          value.actorId = value.payment === 'half' ? state.value?.payment === 'half' ? state.value.actorId : user.uid : this.payerControl.value;
         }
-        const movement = { ...(state.kind === 'movement' ? state.value : {}), ...value, concept: value.concept.trim(), amountCents: eurosToCents(amount), id: state.value?.id || crypto.randomUUID(), createdBy: state.value?.createdBy || user.uid, createdAt: state.value?.createdAt || now, updatedAt: now };
-        if (state.kind === 'recurring') await this.recurring.save({ ...value, description: value.description.trim(), concept: movement.concept, amountCents: movement.amountCents, ...this.recurringForm.getRawValue(), enabled: state.value?.enabled ?? true, effectiveFrom: '' }, state.value);
+        const movement = { ...(state.kind === 'movement' ? state.value : {}), ...value, concept: value.concept.trim(), amountCents: eurosToCents(amount), id: state.value?.id || this.draftId, createdBy: state.value?.createdBy || user.uid, createdAt: state.value?.createdAt || this.draftCreatedAt, updatedAt: now };
+        if (state.kind === 'recurring') await this.recurring.save({ ...value, description: value.description.trim(), concept: movement.concept, amountCents: movement.amountCents, ...this.recurringForm.getRawValue(), enabled: state.value?.enabled ?? true, effectiveFrom: '' }, state.value, this.draftId, this.draftCreatedAt);
         else if (state.confirmRecurring && state.value) await this.recurring.confirm(movement, state.value);
-        else await this.movements.save(movement);
+        else await this.movements.save(movement, state.kind === 'movement' ? state.value || null : null);
       } else if (state.kind === 'settlement') {
         const { amount, ...value } = this.settlementForm.getRawValue();
-        await this.movements.saveSettlement({ ...value, note: value.note.trim(), amountCents: eurosToCents(amount), id: state.value?.id || crypto.randomUUID(), createdBy: state.value?.createdBy || user.uid, createdAt: state.value?.createdAt || now, updatedAt: now });
+        await this.movements.saveSettlement({ ...value, note: value.note.trim(), amountCents: eurosToCents(amount), id: state.value?.id || this.draftId, createdBy: state.value?.createdBy || user.uid, createdAt: state.value?.createdAt || this.draftCreatedAt, updatedAt: now }, state.value || null);
       } else if (state.kind === 'category') {
-        const value = { ...this.categoryForm.getRawValue(), id: state.value?.id || crypto.randomUUID(), archived: state.value?.archived || false };
-        if (state.value && !state.value.parentId) await this.categories.saveFamily(value, this.categoryChildren.getRawValue());
-        else await this.categories.save(value);
+        const value = { ...this.categoryForm.getRawValue(), id: state.value?.id || this.draftId, archived: state.value?.archived || false };
+        if (state.value && !state.value.parentId) await this.categories.saveFamily(value, this.categoryChildren.getRawValue(), this.categoryBaseline);
+        else await this.categories.save(value, state.value || null);
       } else if (state.collection === 'categories') await this.categories.archive(state.id);
-      else await this.store.remove(state.collection, state.id);
+      else await this.store.remove(state.collection, state.id, this.deletionBaseline);
       this.modal.busy.set(false); this.modal.close();
     } catch (error) { this.modal.busy.set(false); this.error.set(errorMessage(error)); }
   }

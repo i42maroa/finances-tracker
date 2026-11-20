@@ -13,7 +13,7 @@
         <span class="recurring-icon" role="img" aria-label="Movimiento recurrente" title="Movimiento recurrente">↻</span>
         <div class="planned-info"><h2>{{ item.concept }}</h2><p>Fecha prevista: {{ view.date(item.scheduledDate || item.date) }} · {{ view.categoryLabel(item) }}</p><span class="planned-status" [class.is-due]="needsAction(item)" [class.is-paid]="confirmed(item)">{{ status(item) }}</span>@if (confirmed(item)) { <p class="confirmation-date">{{ item.type === 'income' ? 'Cobrado el' : 'Pagado el' }} {{ fullDate(item.date) }}</p> }</div>
         <strong class="planned-amount" [class.income-amount]="item.type === 'income'" [class.expense-amount]="item.type === 'expense'">{{ view.money(view.displayAmount(item)) }}</strong>
-        @if (recurrence(item); as recurring) {
+        @if (configuration(item); as recurring) {
           <dl class="planned-details">
             <div><dt>Inicio de la recurrencia</dt><dd>{{ fullDate(recurring.startDate) }}</dd></div>
             <div><dt>Fin de la recurrencia</dt><dd>{{ recurring.endDate ? fullDate(recurring.endDate) : 'Sin fecha de fin' }}</dd></div>

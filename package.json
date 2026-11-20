@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "release": "node scripts/run.mjs release",
     "setup:config": "node scripts/setup-config.mjs",
     "start": "node scripts/run.mjs ng serve --host 127.0.0.1 --no-hmr",
     "build": "node scripts/run.mjs ng build",
@@ -12,7 +13,7 @@
     "emulators": "node scripts/run.mjs firebase emulators:start --only auth,firestore --project demo-hucha",
     "test:rules": "node scripts/run.mjs firebase emulators:exec --only firestore --project demo-hucha \"npm run test:rules:running\"",
     "test:rules:running": "node scripts/run.mjs vitest run --config vitest.rules.config.ts",
-    "test:e2e": "node scripts/run.mjs playwright test e2e/demo.spec.ts e2e/navigation.spec.ts e2e/annual.spec.ts e2e/current-month.spec.ts e2e/summary-type.spec.ts e2e/subcategory-filters.spec.ts e2e/movement-filters.spec.ts e2e/category-layout.spec.ts e2e/fullscreen-menu.spec.ts e2e/recurring.spec.ts e2e/category-defaults.spec.ts e2e/household-income.spec.ts",
+    "test:e2e": "node scripts/run.mjs playwright test e2e/demo.spec.ts e2e/navigation.spec.ts e2e/annual.spec.ts e2e/current-month.spec.ts e2e/summary-type.spec.ts e2e/subcategory-filters.spec.ts e2e/movement-filters.spec.ts e2e/category-layout.spec.ts e2e/fullscreen-menu.spec.ts e2e/recurring.spec.ts e2e/category-defaults.spec.ts e2e/household-income.spec.ts e2e/audit-fixes.spec.ts",
     "test:integration": "node scripts/run.mjs firebase emulators:exec --only auth,firestore --project demo-hucha \"node scripts/run.mjs playwright test e2e/firebase.spec.ts\""
   },
   "engines": {

@@ -36,7 +36,16 @@ test('dos cuentas: vinculación, sincronización y edición simétrica', async (
     await b.getByRole('link', { name: 'Cena sincronizada', exact: true }).click();
     await b.getByRole('button', { name: 'Editar', exact: true }).click();
     await expect(b.getByRole('dialog').getByRole('combobox', { name: 'Subcategoría', exact: true })).toHaveValue('leisure-sub-0');
+    await a.getByRole('navigation', { name: 'Navegación principal' }).getByRole('link', { name: 'Resumen', exact: true }).click();
+    await a.getByRole('link', { name: 'Cena sincronizada', exact: true }).click();
+    await a.getByRole('button', { name: 'Editar', exact: true }).click();
     await b.getByRole('dialog').getByLabel('Importe').fill('80'); await b.getByRole('dialog').getByRole('button', { name: 'Guardar', exact: true }).click();
+    await expect(b.getByRole('dialog')).not.toBeVisible();
+    await a.getByRole('dialog').getByLabel('Importe').fill('70');
+    await a.getByRole('dialog').getByRole('button', { name: 'Guardar', exact: true }).click();
+    await expect(a.getByRole('dialog')).toContainText('El registro ha cambiado');
+    await a.getByRole('dialog').getByRole('button', { name: 'Cancelar', exact: true }).click();
+    await a.getByRole('navigation', { name: 'Navegación principal' }).getByRole('link', { name: 'Liquidaciones', exact: true }).click();
     await expect(a.locator('.debt-amount')).toHaveText('40,00 €');
     await b.getByRole('navigation', { name: 'Navegación principal' }).getByRole('link', { name: 'Liquidaciones', exact: true }).click();
     await b.getByRole('button', { name: 'Registrar liquidación', exact: false }).click();

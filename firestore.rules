@@ -8,7 +8,13 @@ service cloud.firestore {
     function member(cid) { return signed() && request.auth.uid in get(couplePath(cid)).data.memberIds; }
     function memberAfter(cid) { return signed() && request.auth.uid in getAfter(couplePath(cid)).data.memberIds; }
     function text(value, max) { return value is string && value.size() > 0 && value.size() <= max && value.matches('.*\\S.*'); }
-    function date(value) { return value is string && value.matches('[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])'); }
+    function leap(year) { return year % 400 == 0 || (year % 4 == 0 && year % 100 != 0); }
+    function lastDay(year, month) { return month == 2 ? (leap(year) ? 29 : 28) : (month in [4,6,9,11] ? 30 : 31); }
+    function date(value) { return value is string && value.matches('[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])')
+      && int(value.split('-')[0]) >= 1000 && int(value.split('-')[2]) <= lastDay(int(value.split('-')[0]), int(value.split('-')[1])); }
+    function versioned(value) { return value.get('revision', 0) is int && (value.get('revision', 0) == 0 || value.revision > 0); }
+    function nextVersion() { return request.resource.data.get('revision', 0) == resource.data.get('revision', 0) + 1
+      || (request.resource.data.get('revision', 0) == 0 && resource.data.get('revision', 0) == 0); }
     function money(value) { return value is int && value > 0 && value <= 100000000; }
     function metadata(value, cid) {
       return value.createdBy in getAfter(couplePath(cid)).data.memberIds
@@ -98,12 +104,12 @@ service cloud.firestore {
         }
         allow read: if member(cid);
         allow create, update: if memberAfter(cid)
-          && request.resource.data.keys().hasOnly(['id', 'name', 'type', 'icon', 'archived', 'parentId', 'defaultSubcategoryId'])
-          && validParent(request.resource.data) && validDefault(request.resource.data)
+          && request.resource.data.keys().hasOnly(['id', 'name', 'type', 'icon', 'archived', 'parentId', 'defaultSubcategoryId', 'revision'])
+          && versioned(request.resource.data) && validParent(request.resource.data) && validDefault(request.resource.data)
           && request.resource.data.id == id && text(request.resource.data.name, 40)
           && request.resource.data.type in ['income', 'expense']
           && text(request.resource.data.icon, 4) && request.resource.data.archived is bool
-          && (!exists(/databases/$(database)/documents/couples/$(cid)/categories/$(id)) || (resource.data.type == request.resource.data.type && resource.data.get('parentId', '') == request.resource.data.get('parentId', '')));
+          && (!exists(/databases/$(database)/documents/couples/$(cid)/categories/$(id)) || (nextVersion() && resource.data.type == request.resource.data.type && resource.data.get('parentId', '') == request.resource.data.get('parentId', '')));
         allow delete: if false;
       }
       match /recurringMovements/{id} {
@@ -152,11 +158,25 @@ service cloud.firestore {
         allow delete: if false;
       }
       match /movements/{id} {
+        function scheduled(value) {
+          let template = getAfter(/databases/$(database)/documents/couples/$(cid)/recurringMovements/$(value.recurringId)).data;
+          let index = value.get('scheduleIndex', template.history.size());
+          let schedule = index == template.history.size() ? template : template.history[index];
+          let day = int(value.scheduledDate.split('-')[2]);
+          let last = lastDay(int(value.scheduledDate.split('-')[0]), int(value.scheduledDate.split('-')[1]));
+          return index is int && index >= 0 && index <= template.history.size()
+            && schedule.enabled && value.scheduledDate >= schedule.startDate
+            && (schedule.endDate == '' || value.scheduledDate <= schedule.endDate)
+            && value.scheduledDate < schedule.get('effectiveUntil', '9999-12-31')
+            && (value.scheduledDate >= schedule.effectiveFrom || (template.history.size() > 0 && schedule.startDate < template.history[0].startDate && value.scheduledDate < template.history[0].startDate))
+            && (day in schedule.days || (day == last && (last < 31 && 31 in schedule.days || last < 30 && 30 in schedule.days || last < 29 && 29 in schedule.days)));
+        }
         function validRecurrence(value) {
           let rid = value.get('recurringId', '');
           return rid is string && (rid == '' ? !value.keys().hasAny(['recurringId', 'scheduledDate', 'status']) : (
             text(rid, 100) && date(value.scheduledDate) && id == 'recurring-' + rid + '-' + value.scheduledDate
             && value.status in ['confirmed', 'skipped']
+            && (exists(/databases/$(database)/documents/couples/$(cid)/movements/$(id)) || scheduled(value))
             && getAfter(/databases/$(database)/documents/couples/$(cid)/recurringMovements/$(rid)).data.space == value.space
             && getAfter(/databases/$(database)/documents/couples/$(cid)/recurringMovements/$(rid)).data.ownerId == value.ownerId
             && getAfter(/databases/$(database)/documents/couples/$(cid)/recurringMovements/$(rid)).data.type == value.type));
@@ -173,8 +193,8 @@ service cloud.firestore {
           let value = request.resource.data;
           let members = get(couplePath(cid)).data.memberIds;
           let category = getAfter(/databases/$(database)/documents/couples/$(cid)/categories/$(value.categoryId)).data;
-          return value.keys().hasOnly(['id', 'type', 'amountCents', 'date', 'concept', 'description', 'categoryId', 'subcategoryId', 'space', 'ownerId', 'actorId', 'payment', 'createdBy', 'createdAt', 'updatedAt', 'recurringId', 'scheduledDate', 'status'])
-            && validRecurrence(value)
+          return value.keys().hasOnly(['id', 'type', 'amountCents', 'date', 'concept', 'description', 'categoryId', 'subcategoryId', 'space', 'ownerId', 'actorId', 'payment', 'createdBy', 'createdAt', 'updatedAt', 'recurringId', 'scheduledDate', 'status', 'scheduleIndex', 'revision'])
+            && versioned(value) && validRecurrence(value)
             && category.get('parentId', '') == '' && validSubcategory(value)
             && value.id == id && value.type in ['income', 'expense'] && money(value.amountCents)
             && date(value.date) && text(value.concept, 100)
@@ -192,7 +212,7 @@ service cloud.firestore {
         allow get: if member(cid) && (!exists(/databases/$(database)/documents/couples/$(cid)/movements/$(id)) || accessible(resource.data) || resource.data.type == 'income');
         allow list: if member(cid) && (accessible(resource.data) || resource.data.type == 'income');
         allow create: if member(cid) && accessible(request.resource.data) && valid() && request.resource.data.createdBy == request.auth.uid;
-        allow update: if member(cid) && accessible(resource.data) && accessible(request.resource.data) && valid() && immutableMetadata()
+        allow update: if member(cid) && accessible(resource.data) && accessible(request.resource.data) && valid() && immutableMetadata() && nextVersion()
           && request.resource.data.get('recurringId', '') == resource.data.get('recurringId', '')
           && request.resource.data.get('scheduledDate', '') == resource.data.get('scheduledDate', '');
         allow delete: if member(cid) && accessible(resource.data) && resource.data.get('recurringId', '') == '';
@@ -201,14 +221,14 @@ service cloud.firestore {
         function valid() {
           let value = request.resource.data;
           let members = get(couplePath(cid)).data.memberIds;
-          return value.keys().hasOnly(['id', 'amountCents', 'date', 'fromId', 'toId', 'note', 'createdBy', 'createdAt', 'updatedAt'])
-            && value.id == id && members.size() == 2 && money(value.amountCents) && date(value.date)
+          return value.keys().hasOnly(['id', 'amountCents', 'date', 'fromId', 'toId', 'note', 'createdBy', 'createdAt', 'updatedAt', 'revision'])
+            && versioned(value) && value.id == id && members.size() == 2 && money(value.amountCents) && date(value.date)
             && value.fromId in members && value.toId in members && value.fromId != value.toId
             && value.note is string && value.note.size() <= 200 && metadata(value, cid);
         }
         allow read: if member(cid);
         allow create: if member(cid) && valid() && request.resource.data.createdBy == request.auth.uid;
-        allow update: if member(cid) && valid() && immutableMetadata();
+        allow update: if member(cid) && valid() && immutableMetadata() && nextVersion();
         allow delete: if member(cid);
       }
     }

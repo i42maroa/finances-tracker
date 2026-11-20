@@ -13,7 +13,7 @@ if (!node) {
   process.exit(1);
 }
 const [command, ...args] = process.argv.slice(2);
-const entries = { ng: '@angular/cli/bin/ng.js', vitest: 'vitest/vitest.mjs', playwright: '@playwright/test/cli.js', firebase: 'firebase-tools/lib/bin/firebase.js' };
+const entries = { ng: '@angular/cli/bin/ng.js', vitest: 'vitest/vitest.mjs', playwright: '@playwright/test/cli.js', firebase: 'firebase-tools/lib/bin/firebase.js', release: '../scripts/release.mjs' };
 if (!entries[command]) { console.error('Herramienta no reconocida.'); process.exit(1); }
 const env = { ...process.env, PATH: `${dirname(node)}${delimiter}${process.env.PATH || ''}` };
 if (command === 'firebase') env.DEBUG = '';

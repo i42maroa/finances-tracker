@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Movement, RecurringMovement } from '../src/app/models/models';
-import { dueOccurrences, isConfirmed, pendingOccurrences, plannedMonthMovements, recurringSchedule, validDate } from '../src/app/services/recurring';
+import { dueOccurrences, isConfirmed, pendingOccurrences, plannedMonthMovements, recurringSchedule, scheduleForOccurrence, validDate } from '../src/app/services/recurring';
 import { calculateDebt, summarize } from '../src/app/services/finance';
 
 function template(overrides: Partial<RecurringMovement> = {}): RecurringMovement {
@@ -8,6 +8,13 @@ function template(overrides: Partial<RecurringMovement> = {}): RecurringMovement
 }
 
 describe('Calendario de movimientos recurrentes', () => {
+  it('conserva la configuración de una confirmación anterior a otra edición del mismo día', () => {
+    const original = template({ startDate: '2026-11-01', effectiveFrom: '2026-11-01', amountCents: 900 });
+    const [confirmed] = pendingOccurrences([original], [], '2026-11');
+    const changed = { ...original, amountCents: 1000, effectiveFrom: '2026-11-02', revision: 2, history: [{ ...recurringSchedule(original), effectiveUntil: '2026-11-02' }] };
+    expect(scheduleForOccurrence(changed, confirmed.date, confirmed.scheduleIndex)?.amountCents).toBe(900);
+    expect(scheduleForOccurrence(changed, '2026-12-02')?.amountCents).toBe(1000);
+  });
   it('mantiene los confirmados en el mes previsto aunque cambie su fecha real, sin duplicarlos', () => {
     const item = template({ startDate: '2026-11-01', effectiveFrom: '2026-11-01' }), [pending] = pendingOccurrences([item], [], '2026-11');
     const confirmed: Movement = { ...pending, date: '2026-12-05', status: 'confirmed', amountCents: 9000 };
@@ -118,6 +125,8 @@ describe('Calendario de movimientos recurrentes', () => {
     const corrected = { ...original, startDate: '2026-11-01', history: [{ ...recurringSchedule(original), effectiveUntil: '2026-11-19' }] };
     const changed = { ...corrected, amountCents: 1000, effectiveFrom: '2026-11-20', history: [...corrected.history, { ...recurringSchedule(corrected), effectiveUntil: '2026-11-20' }] };
     expect(pendingOccurrences([changed], [], '2026-11').map(item => [item.date, item.amountCents])).toEqual([['2026-11-02', 900]]);
+    expect(scheduleForOccurrence(changed, '2026-11-02')?.amountCents).toBe(900);
+    expect(scheduleForOccurrence(changed, '2026-12-02')?.amountCents).toBe(1000);
     expect(pendingOccurrences([changed], [], '2026-12').map(item => item.amountCents)).toEqual([1000]);
     const paused = { ...changed, enabled: false, history: [...changed.history, { ...recurringSchedule(changed), effectiveUntil: '2026-11-20' }] };
     expect(pendingOccurrences([paused], [], '2026-11').map(item => [item.date, item.amountCents])).toEqual([['2026-11-02', 900]]);

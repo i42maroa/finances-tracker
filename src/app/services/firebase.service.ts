@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { initializeApp } from 'firebase/app';
 import { Auth, connectAuthEmulator, getAuth } from 'firebase/auth';
-import { Firestore, connectFirestoreEmulator, getFirestore } from 'firebase/firestore';
+import { Firestore, connectFirestoreEmulator, initializeFirestore, memoryLocalCache, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore';
 import { FirebaseConfig } from '../models/models';
 import { environment } from '../../environments/environment';
 
@@ -17,7 +17,8 @@ export class FirebaseService {
     if (!config.apiKey || !config.projectId || !config.authDomain || !config.appId) return;
     const app = initializeApp(config);
     this.auth = getAuth(app);
-    this.db = getFirestore(app);
+    try { this.db = initializeFirestore(app, { localCache: config.useEmulators ? memoryLocalCache() : persistentLocalCache({ tabManager: persistentMultipleTabManager() }) }); }
+    catch { this.db = initializeFirestore(app, { localCache: memoryLocalCache() }); }
     if (config.useEmulators) {
       connectAuthEmulator(this.auth, 'http://127.0.0.1:9099');
       connectFirestoreEmulator(this.db, '127.0.0.1', 8080);

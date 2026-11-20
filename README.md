@@ -2,6 +2,8 @@
 
 MVP de finanzas en pareja construido a partir de [CONTEXTO.md](CONTEXTO.md). Angular **22.2.6**, TypeScript, Firebase Authentication y Cloud Firestore. Interfaz en español, adaptada a móvil y escritorio, con colores crema y rosados e inspiración de hucha.
 
+Las [correcciones de la revisión](docs/audit-fixes.md) documentan las optimizaciones, el control de ediciones simultáneas y la publicación validada. Esta entrega mantiene Firebase en el plan gratuito; los cambios de arquitectura de servidor se han descartado.
+
 [Captura de escritorio](docs/screenshots/desktop.png) · [Captura móvil](docs/screenshots/mobile.png)
 
 [Detalle del movimiento](docs/screenshots/detail-desktop.png) · [Detalle en móvil](docs/screenshots/detail-mobile.png) · [Configuración del perfil](docs/screenshots/profile-desktop.png)
@@ -106,13 +108,14 @@ Las claves públicas de una aplicación web de Firebase serán visibles para el 
 
    ```sh
    npx firebase login
-   npm run build
-   npx firebase deploy --project TU_PROYECTO --only "firestore:rules,firestore:indexes,hosting"
+   node scripts/run.mjs release --project TU_PROYECTO
    ```
 
 Para usar emuladores en desarrollo, completa el JSON local con `apiKey: "demo-api-key"`, `authDomain: "demo-hucha.firebaseapp.com"`, `projectId: "demo-hucha"`, `appId: "demo-app"` y `useEmulators: true`, y ejecuta `npm run emulators` junto con `npm start` en otra terminal.
 
 `firebase.json` configura la salida de Angular (`dist/hucha/browser`), la navegación SPA y las reglas. No se necesita un servidor propio ni Cloud Functions para el MVP. Subir el código a GitHub no publica la aplicación en Firebase Hosting.
+
+El comando de publicación ejecuta las pruebas y la compilación antes de desplegar. Para validar sin publicar, usa `node scripts/run.mjs release --verify-only`. También están disponibles como `npm run release -- --project TU_PROYECTO` y `npm run release -- --verify-only` si el lanzador de npm transmite los argumentos; la forma directa evita problemas de argumentos con `npm.ps1` en Windows.
 
 ## Modelo de datos y acceso
 

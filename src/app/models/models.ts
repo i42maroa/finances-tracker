@@ -4,11 +4,11 @@ export type MovementSort = 'date-desc' | 'date-asc' | 'amount-desc' | 'amount-as
 export interface MovementFilters { name: string; minCents: number | null; maxCents: number | null; createdBy: string; sort: MovementSort; recurringExpenses?: boolean; }
 export interface Profile { uid: string; name: string; email: string; coupleId: string | null; }
 export interface Couple { id: string; memberIds: string[]; memberNames: Record<string, string>; inviteCode: string; createdAt: string; }
-export interface Category { id: string; name: string; type: MovementType; icon: string; archived: boolean; parentId?: string; defaultSubcategoryId?: string; }
+export interface Category { revision?: number; id: string; name: string; type: MovementType; icon: string; archived: boolean; parentId?: string; defaultSubcategoryId?: string; }
 export interface Movement {
   id: string; type: MovementType; amountCents: number; date: string; concept: string; description?: string;
   categoryId: string; subcategoryId?: string; space: Space; ownerId: string; actorId: string; payment: 'single' | 'half';
-  createdBy: string; createdAt: string; updatedAt: string;
+  revision?: number; scheduleIndex?: number; createdBy: string; createdAt: string; updatedAt: string;
   recurringId?: string; scheduledDate?: string; status?: 'pending' | 'confirmed' | 'skipped';
 }
 export interface RecurringSchedule {
@@ -20,7 +20,7 @@ export interface RecurringHistory extends RecurringSchedule { effectiveUntil: st
 export interface RecurringMovement extends RecurringSchedule {
   id: string; createdBy: string; createdAt: string; updatedAt: string; revision: number; history: RecurringHistory[];
 }
-export interface Settlement { id: string; amountCents: number; date: string; fromId: string; toId: string; note: string; createdBy: string; createdAt: string; updatedAt: string; }
+export interface Settlement { revision?: number; id: string; amountCents: number; date: string; fromId: string; toId: string; note: string; createdBy: string; createdAt: string; updatedAt: string; }
 export interface HouseholdData { couple: Couple; categories: Category[]; movements: Movement[]; settlements: Settlement[]; recurringMovements?: RecurringMovement[]; }
 export interface Summary { incomeCents: number; expenseCents: number; netCents: number; }
 export interface Debt { amountCents: number; fromId: string | null; toId: string | null; }

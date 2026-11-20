@@ -9,7 +9,7 @@ import { PlannedService } from '../../services/planned.service';
 import { RecurringService } from '../../services/recurring.service';
 import { ViewService } from '../../services/view.service';
 import { errorMessage } from '../../services/errors';
-import { isConfirmed } from '../../services/recurring';
+import { isConfirmed, scheduleForOccurrence } from '../../services/recurring';
 import { BreadcrumbComponent, BreadcrumbItem } from '../../shared/breadcrumb/breadcrumb';
 import { FiltersComponent } from '../../shared/filters/filters';
 
@@ -57,6 +57,7 @@ export class PlannedComponent {
   confirmed = isConfirmed;
   needsAction(item: Movement): boolean { return !isConfirmed(item) && item.date <= this.planned.today(); }
   recurrence(item: Movement) { return this.view.store.recurringMovements().find(value => value.id === item.recurringId); }
+  configuration(item: Movement) { const template = this.recurrence(item); return template ? scheduleForOccurrence(template, item.scheduledDate || item.date, item.scheduleIndex) || template : undefined; }
   fullDate(value: string): string { return new Intl.DateTimeFormat('es-ES', { dateStyle: 'medium' }).format(new Date(`${value}T12:00:00`)); }
   movementOrigin() { return { ...this.returnQuery(), from: 'planned', year: Number(this.month().slice(0, 4)), month: this.month() }; }
   status(item: Movement): string {
