@@ -15,7 +15,7 @@ export class RecurringComponent {
   scope = signal<'all' | 'shared' | 'individual'>('all');
   busy = signal('');
   error = signal('');
-  rows = computed(() => this.view.store.recurringMovements().filter(item => this.scope() === 'all' || item.space === this.scope()).sort((a, b) => Number(b.enabled) - Number(a.enabled) || a.concept.localeCompare(b.concept)));
+  rows = computed(() => this.view.store.recurringMovements().filter(item => this.scope() === 'all' || item.space === this.scope()).sort((a, b) => Math.min(...a.days) - Math.min(...b.days) || a.concept.localeCompare(b.concept, 'es') || a.id.localeCompare(b.id)));
   add(): void { this.modal.movementSpace.set(this.scope() === 'individual' ? 'individual' : 'shared'); this.modal.open({ kind: 'recurring' }); }
   status(item: RecurringMovement): string { return !item.enabled ? 'Pausado' : item.endDate && item.endDate < localDate() ? 'Finalizado' : item.startDate > localDate() ? 'Programado' : 'Activo'; }
   date(value: string): string { return new Intl.DateTimeFormat('es-ES', { dateStyle: 'medium' }).format(new Date(`${value}T12:00:00`)); }

@@ -33,7 +33,7 @@ export class ViewService {
     if (item.date < from || item.date > to || this.category() && item.categoryId !== this.category()) return false;
     const normalize = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es');
     if (!normalize(item.concept).includes(normalize(this.search().trim()))) return false;
-    return this.scope() === 'shared' ? item.space === 'shared' : item.space === 'individual' ? item.ownerId === this.uid() : true;
+    return this.scope() === 'shared' ? item.space === 'shared' || item.type === 'income' : item.space === 'individual' ? item.ownerId === this.uid() : true;
   }).sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt)));
   summary = computed(() => this.balances.summary(this.filtered(), this.scope() === 'personal' ? this.uid() : undefined));
   plannedMovements = computed(() => plannedMonthMovements(this.store.recurringMovements(), this.store.movements(), this.month())
@@ -66,7 +66,7 @@ export class ViewService {
   });
   months = computed(() => Array.from({ length: 12 }, (_, index) => {
     const month = `${this.year()}-${String(index + 1).padStart(2, '0')}`;
-    const planned = plannedMonthMovements(this.store.recurringMovements(), this.store.movements(), month).filter(item => this.scope() === 'personal' || item.space === 'shared');
+    const planned = plannedMonthMovements(this.store.recurringMovements(), this.store.movements(), month).filter(item => item.space === 'shared' || this.scope() === 'personal' && item.ownerId === this.uid());
     return {
       month,
       pendingCount: planned.filter(item => !isConfirmed(item)).length,

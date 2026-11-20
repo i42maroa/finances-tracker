@@ -1,5 +1,19 @@
 # Contexto de la aplicación de finanzas en pareja
 
+## Ingresos conjuntos en Hogar
+
+- Hogar incorpora todos los ingresos confirmados de ambos miembros, individuales y comunes, una sola vez. Las nóminas conservan su espacio Individual y su titular; los gastos del resumen de Hogar siguen siendo únicamente los comunes.
+- Los resúmenes mensual y anual, la tabla de meses, los listados y los gráficos de ingresos utilizan este criterio. La tarjeta de ingresos se llama Ingresos totales de la pareja; el saldo se llama Disponible tras gastos comunes e indica que todavía faltan los gastos individuales.
+- Individual conserva los ingresos y gastos propios y la mitad de los comunes. El cálculo de deudas sigue utilizando solo movimientos comunes y liquidaciones.
+- Ambos miembros pueden consultar los ingresos individuales de la pareja, pero solo el titular puede editarlos o eliminarlos. Los gastos individuales y las configuraciones recurrentes individuales siguen siendo privados. Se actualizan las consultas y las reglas de Firestore sin migrar ni duplicar registros.
+
+## Gráfico de líneas del resumen anual
+
+- El selector de gráficos incorpora Líneas solo en el resumen anual. Muestra una lista de categorías, inicialmente cerradas; los gráficos cubren de enero a diciembre y completan con cero los meses sin movimientos.
+- Al abrir una categoría se despliegan sus subcategorías, incluido Sin subcategoría cuando corresponde, y debajo el gráfico del total de esa categoría. Seleccionar una subcategoría cambia el gráfico a su línea; volver a pulsarla recupera el total. Abrir otra categoría cierra la anterior y limpia la selección de subcategoría; volver a pulsar una categoría abierta la cierra.
+- Utiliza movimientos confirmados del año y tipo seleccionados, con la misma atribución de Hogar/Individual que el resumen. Al pulsar un punto se abre un popup con su categoría o subcategoría, mes, año e importe exacto. Se cierra con la X, Escape o pulsando fuera; los puntos admiten teclado. Se elimina el desplegable de datos mensuales.
+- En móviles y tablets el gráfico adapta su ancho y altura al espacio disponible para mostrar los doce meses sin desplazamiento horizontal. Las etiquetas de meses se inclinan en pantallas estrechas y los importes del eje usan formato compacto; los popups conservan los importes exactos.
+
 ## Subcategorías predeterminadas al crear movimientos
 
 - Cada categoría general permite elegir una subcategoría activa por defecto desde su editor, o dejar Ninguna. La elección es compartida entre los miembros de la pareja y se muestra en el detalle de la categoría.
@@ -7,6 +21,8 @@
 - Las ediciones de movimientos o recurrencias existentes conservan sus datos y no aplican sugerencias automáticas. Eliminar la subcategoría predeterminada también limpia esa configuración, sin modificar movimientos históricos. Los datos anteriores sin preferencia siguen siendo válidos.
 
 ## Ampliación: movimientos recurrentes (19 de noviembre de 2026)
+
+- El listado de recurrentes se ordena por día del mes de menor a mayor, tomando el menor cuando se configuran varios días. Los empates se resuelven por nombre y el criterio se conserva en los filtros Todos, Hogar e Individual.
 
 - Confirmar un previsto lo mantiene visible en la página del mes previsto como Pagado o Cobrado. Se muestran fecha prevista, fecha real, inicio y fin de la recurrencia, días de cobro/pago, importe recurrente, espacio y pagador/receptor. Se puede abrir el movimiento confirmado o editar la recurrencia. Los totales pendientes y los avisos excluyen confirmados, y los omitidos siguen ocultos.
 

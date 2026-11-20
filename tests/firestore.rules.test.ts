@@ -209,16 +209,21 @@ describe('Validación de registros y permisos simétricos', () => {
     await assertSucceeds(updateDoc(own, { concept: 'Propio' }));
     await assertSucceeds(deleteDoc(own));
   });
-  it('consulta solo Hogar y los movimientos propios de cada cuenta', async () => {
+  it('consulta Hogar, movimientos propios e ingresos de ambos sin exponer gastos ajenos', async () => {
     await setDoc(doc(db('a'), 'couples', cid, 'movements', 'shared'), movement({ id: 'shared' }));
     await setDoc(doc(db('a'), 'couples', cid, 'movements', 'own-a'), movement({ id: 'own-a', space: 'individual' }));
     await setDoc(doc(db('b'), 'couples', cid, 'movements', 'own-b'), movement({ id: 'own-b', space: 'individual', ownerId: 'b', actorId: 'b', createdBy: 'b' }));
+    await setDoc(doc(db('a'), 'couples', cid, 'categories', 'salary'), { id: 'salary', type: 'income', name: 'Nómina', icon: '+', archived: false });
+    for (const uid of ['a', 'b']) await setDoc(doc(db(uid), 'couples', cid, 'movements', `income-${uid}`), movement({ id: `income-${uid}`, type: 'income', categoryId: 'salary', space: 'individual', ownerId: uid, actorId: uid, createdBy: uid }));
     for (const uid of ['a', 'b']) {
       const movements = collection(db(uid), 'couples', cid, 'movements');
       await assertFails(getDocs(movements));
-      const result = await assertSucceeds(getDocs(query(movements, or(where('space', '==', 'shared'), where('ownerId', '==', uid)))));
-      expect(result.docs.map(item => item.id).sort()).toEqual([`own-${uid}`, 'shared']);
+      const result = await assertSucceeds(getDocs(query(movements, or(where('space', '==', 'shared'), where('ownerId', '==', uid), where('type', '==', 'income')))));
+      expect(result.docs.map(item => item.id).sort()).toEqual(['income-a', 'income-b', `own-${uid}`, 'shared']);
+      const incomes = await assertSucceeds(getDocs(query(movements, where('type', '==', 'income'))));
+      expect(incomes.docs.map(item => item.id).sort()).toEqual(['income-a', 'income-b']);
     }
+    await assertFails(getDocs(query(collection(db('c'), 'couples', cid, 'movements'), where('type', '==', 'income'))));
   });
   it('admite descripción opcional y valida su tipo y longitud', async () => {
     const ref = doc(db('a'), 'couples', cid, 'movements', 'm');
@@ -229,14 +234,18 @@ describe('Validación de registros y permisos simétricos', () => {
     await assertFails(updateDoc(ref, { description: 'a'.repeat(1001) }));
     await assertFails(updateDoc(ref, { description: 123 }));
   });
-  it('permite compartir ingresos y conserva la privacidad de los individuales', async () => {
+  it('permite leer los ingresos individuales de la pareja y reserva su edición y eliminación al titular', async () => {
     await setDoc(doc(db('a'), 'couples', cid, 'categories', 'salary'), { id: 'salary', type: 'income', name: 'Nómina', icon: '+', archived: false });
     const value = movement({ type: 'income', categoryId: 'salary' });
     const ref = doc(db('a'), 'couples', cid, 'movements', 'm');
     await assertSucceeds(setDoc(ref, value));
     await assertFails(setDoc(ref, { ...value, space: 'individual', actorId: 'b' }));
     await assertSucceeds(setDoc(ref, { ...value, space: 'individual' }));
-    await assertFails(getDoc(doc(db('b'), 'couples', cid, 'movements', 'm')));
+    await assertSucceeds(getDoc(doc(db('b'), 'couples', cid, 'movements', 'm')));
+    await assertFails(getDoc(doc(db('c'), 'couples', cid, 'movements', 'm')));
+    await assertFails(getDoc(doc(env.unauthenticatedContext().firestore(), 'couples', cid, 'movements', 'm')));
+    await assertFails(updateDoc(doc(db('b'), 'couples', cid, 'movements', 'm'), { amountCents: 7000 }));
+    await assertFails(deleteDoc(doc(db('b'), 'couples', cid, 'movements', 'm')));
     await assertFails(updateDoc(doc(db('b'), 'couples', cid, 'movements', 'm'), { space: 'shared' }));
     await assertSucceeds(updateDoc(ref, { space: 'shared' }));
     await assertSucceeds(getDoc(doc(db('b'), 'couples', cid, 'movements', 'm')));

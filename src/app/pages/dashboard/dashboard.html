@@ -1,26 +1,27 @@
 <app-breadcrumb [items]="breadcrumbs()" />
 @if (!monthly || validMonth()) {
-<div class="page-heading"><div><h1>{{ monthly ? monthTitle() : (view.scope() === 'shared' ? 'Hogar' : view.auth.user()?.name) + " " + view.year() }}<span>.</span></h1><p>{{ monthly ? "Ingresos, gastos y movimientos del mes." : "Ingresos, gastos y balance anual." }}</p></div></div>
+<div class="page-heading"><div><h1>{{ monthly ? monthTitle() : (view.scope() === 'shared' ? 'Hogar' : view.auth.user()?.name) + " " + view.year() }}<span>.</span></h1><p>{{ view.scope() === 'shared' ? (monthly ? "Ingresos de ambos, gastos comunes y movimientos del mes." : "Ingresos de ambos, gastos comunes y disponible anual.") : (monthly ? "Ingresos, gastos y movimientos del mes." : "Ingresos, gastos y balance anual.") }}</p></div></div>
 <app-filters [lockPeriod]="true" [dateRange]="false" [extraFilters]="false" />
 <section class="summary-grid" aria-label="Resumen del período">
   <button type="button" class="stat-card" aria-label="Filtrar ingresos" [attr.aria-pressed]="view.listType() === 'income'" (click)="selectSummaryType('income')">
-    <span class="stat-label">Ingresos <span class="stat-icon green" aria-hidden="true">↙</span></span>
+    <span class="stat-label">{{ view.scope() === 'shared' ? 'Ingresos totales de la pareja' : 'Ingresos' }} <span class="stat-icon green" aria-hidden="true">↙</span></span>
     <span class="stat-value income-amount">{{ view.money(view.summary().incomeCents) }}</span>
   </button>
   <button type="button" class="stat-card" aria-label="Filtrar gastos" [attr.aria-pressed]="view.listType() === 'expense'" (click)="selectSummaryType('expense')">
-    <span class="stat-label">Gastos <span class="stat-icon pink" aria-hidden="true">↗</span></span>
+    <span class="stat-label">{{ view.scope() === 'shared' ? 'Gastos comunes' : 'Gastos' }} <span class="stat-icon pink" aria-hidden="true">↗</span></span>
     <span class="stat-value expense-amount">{{ view.money(view.summary().expenseCents) }}</span>
   </button>
   <button type="button" class="stat-card net" aria-label="Mostrar ingresos y gastos" [attr.aria-pressed]="view.listType() === 'all'" [class.net-positive]="view.summary().netCents > 0" [class.net-negative]="view.summary().netCents <= 0" (click)="selectSummaryType('all')">
-    <span class="stat-label">Balance del período <span class="stat-icon" aria-hidden="true">≈</span></span>
+    <span class="stat-label">{{ view.scope() === 'shared' ? 'Disponible tras gastos comunes' : 'Balance del período' }} <span class="stat-icon" aria-hidden="true">≈</span></span>
     <span class="stat-value" [class.income-amount]="view.summary().netCents > 0" [class.negative-amount]="view.summary().netCents <= 0">{{ view.money(view.summary().netCents) }}</span>
+    @if (view.scope() === 'shared') { <small>Antes de descontar los gastos individuales.</small> }
     <span class="net-decoration" aria-hidden="true">✳</span>
   </button>
 </section>
 @if (!monthly) {
 <section class="panel months-panel" aria-label="Resumen por meses"><div class="section-heading"><h2>Meses de {{ view.year() }}</h2><label class="year-selector">Año<input aria-label="Año del resumen" type="number" min="1000" max="9999" [formControl]="yearControl" required></label></div>
 @if (view.months().length) {
-<div class="months-scroll"><table class="months-table"><thead><tr><th>Mes</th><th>Ingresos</th><th>Gastos</th><th>Balance</th></tr></thead><tbody>
+<div class="months-scroll"><table class="months-table"><thead><tr><th>Mes</th><th>{{ view.scope() === 'shared' ? 'Ingresos de ambos' : 'Ingresos' }}</th><th>{{ view.scope() === 'shared' ? 'Gastos comunes' : 'Gastos' }}</th><th [attr.title]="view.scope() === 'shared' ? 'Disponible tras gastos comunes' : null">{{ view.scope() === 'shared' ? 'Disponible' : 'Balance' }}</th></tr></thead><tbody>
 @for (row of view.months(); track row.month) { <tr (click)="openMonth(row.month)"><td><a [routerLink]="['/resumen', row.month]" [queryParams]="monthFilters()" (click)="$event.stopPropagation()">{{ row.label }}</a>@if (row.pendingCount) { <small class="month-pending">{{ row.pendingCount }} previstos</small> }</td><td class="income-amount">{{ view.money(row.incomeCents) }}</td><td class="expense-amount">{{ view.money(row.expenseCents) }}</td><td [class.income-amount]="row.netCents > 0" [class.negative-amount]="row.netCents <= 0">{{ view.money(row.netCents) }}</td></tr> }
 </tbody></table></div>
 } @else { <div class="empty-state"><p>No hay movimientos todavía.</p></div> }
@@ -34,19 +35,29 @@
 @if (chartMode() === 'pie') { <svg class="category-pie" viewBox="0 0 200 200" role="group" [attr.aria-label]="view.breakdownType() === 'expense' ? 'Gráfico de gastos por categoría' : 'Gráfico de ingresos por categoría'">
 @for (slice of pieSlices(); track slice.category?.id) { <path [attr.d]="slice.path" [attr.fill]="slice.color" role="button" tabindex="0" [attr.aria-label]="slice.category?.name + ': ' + view.money(slice.amount) + ' (' + slice.percent + ')'" [attr.aria-pressed]="view.listCategory() === slice.category?.id" (click)="selectCategory(slice.category!.id)" (keydown.enter)="selectCategory(slice.category!.id)" (keydown.space)="$event.preventDefault(); selectCategory(slice.category!.id)"><title>{{ slice.category?.name }}: {{ view.money(slice.amount) }} ({{ slice.percent }})</title></path> }
 </svg> }
-<div class="category-bars">@for (row of view.breakdown(); track row.category?.id) { <div class="category-group"><button type="button" class="category-row" [class.selected]="view.listCategory() === row.category?.id" [attr.aria-expanded]="hasSubcategories(row.category?.id) ? view.listCategory() === row.category?.id : null" [attr.aria-controls]="hasSubcategories(row.category?.id) ? 'subcategories-' + row.category?.id : null" [attr.aria-pressed]="view.listCategory() === row.category?.id" (click)="selectCategory(row.category!.id)"><div><span><span class="category-swatch" [style.background]="chartColors[$index % chartColors.length]"></span>{{ row.category?.icon }} {{ row.category?.name }}</span><strong>{{ view.money(row.amount) }}</strong></div>
+<div class="category-bars">@for (row of view.breakdown(); track row.category?.id) { <div class="category-group"><button type="button" class="category-row" [class.selected]="view.listCategory() === row.category?.id" [attr.aria-expanded]="hasSubcategories(row.category?.id) || (!monthly && chartMode() === 'lines') ? view.listCategory() === row.category?.id : null" [attr.aria-controls]="hasSubcategories(row.category?.id) || (!monthly && chartMode() === 'lines') ? 'category-details-' + row.category?.id : null" [attr.aria-pressed]="view.listCategory() === row.category?.id" (click)="selectCategory(row.category!.id)"><div><span><span class="category-swatch" [style.background]="chartColors[$index % chartColors.length]"></span>{{ row.category?.icon }} {{ row.category?.name }}</span><strong>{{ view.money(row.amount) }}</strong></div>
 @if (chartMode() === 'bars') { <div class="bar-track"><div [style.width.%]="row.amount / view.breakdownTotal() * 100" [style.background]="chartColors[$index % chartColors.length]"></div></div> } @else { <span class="category-percent">{{ percentage(row.amount) }}</span> }
 </button>
-@if (view.listCategory() === row.category?.id && hasSubcategories(row.category.id)) {
+@if (view.listCategory() === row.category?.id && (hasSubcategories(row.category.id) || (!monthly && chartMode() === 'lines'))) {
+  <div [id]="'category-details-' + row.category.id">
+  @if (hasSubcategories(row.category.id)) {
   <div class="subcategory-breakdown" [id]="'subcategories-' + row.category.id" role="group" [attr.aria-label]="'Subcategorías de ' + row.category.name">
     @for (child of subcategoryBreakdown().get(row.category!.id) || []; track child.id) {
       <button type="button" class="subcategory-row" [class.selected]="view.listSubcategory() === child.id" [attr.aria-pressed]="view.listSubcategory() === child.id" (click)="selectSubcategory(child.id)"><span>{{ child.name }}</span><strong>{{ view.money(child.amount) }}</strong></button>
     } @empty { <p>No hay subcategorías.</p> }
   </div>
+  }
+  @if (!monthly && chartMode() === 'lines') {
+    <section class="category-line-chart" [attr.aria-label]="'Evolución mensual de ' + row.category.name">
+      <h3>Evolución mensual de {{ view.listSubcategory() ? subcategoryName() : row.category.name }}</h3>
+      <app-monthly-lines [series]="monthlyLines()" [year]="view.year()" />
+    </section>
+  }
+  </div>
 }
 </div> }</div></div>
 } @else { <div class="small-empty">{{ view.breakdownType() === 'expense' ? 'No hay gastos en este período.' : 'No hay ingresos en este período.' }}</div> }
-<div class="chart-view-switch" role="group" aria-label="Tipo de gráfico"><button type="button" aria-label="Gráfico de barras" [attr.aria-pressed]="chartMode() === 'bars'" (click)="chartMode.set('bars')">Barras</button><button type="button" aria-label="Gráfico de sectores" [attr.aria-pressed]="chartMode() === 'pie'" (click)="chartMode.set('pie')">Sectores</button></div>
+<div class="chart-view-switch" role="group" aria-label="Tipo de gráfico"><button type="button" aria-label="Gráfico de barras" [attr.aria-pressed]="chartMode() === 'bars'" (click)="chartMode.set('bars')">Barras</button><button type="button" aria-label="Gráfico de sectores" [attr.aria-pressed]="chartMode() === 'pie'" (click)="chartMode.set('pie')">Sectores</button>@if (!monthly) { <button type="button" aria-label="Gráfico de líneas" [attr.aria-pressed]="chartMode() === 'lines'" (click)="chartMode.set('lines')">Líneas</button> }</div>
 </section></div>
 <section id="summary-movements" class="panel recent-panel"><div class="section-heading"><h2>{{ monthly ? "Movimientos del mes" : "Movimientos del año" }}</h2><div class="movement-list-actions"><button type="button" class="icon-button" (click)="openFilters()" aria-label="Filtrar movimientos" title="Filtrar movimientos"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg></button>
   <details #sortMenu class="movement-sort" (keydown.escape)="closeSort(); $event.stopPropagation(); sortMenu.querySelector('summary')?.focus()">

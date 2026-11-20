@@ -24,6 +24,7 @@ export class StoreService {
   private demoAllMovements: Movement[] = [];
   private demoAllRecurring: RecurringMovement[] = [];
   private canAccess(value: Pick<Movement, 'space' | 'ownerId'>): boolean { return value.space === 'shared' || value.ownerId === this.auth.user()?.uid; }
+  private canReadMovement(value: Movement): boolean { return this.canAccess(value) || value.type === 'income'; }
   constructor() {
     effect(() => {
       const user = this.auth.user(), demo = this.auth.demo();
@@ -63,7 +64,7 @@ export class StoreService {
       this.demoAllMovements = data.movements;
       this.demoAllRecurring = data.recurringMovements || [];
       this.recurringMovements.set(this.demoAllRecurring.filter(value => this.canAccess(value)));
-      this.couple.set(data.couple); this.categories.set(data.categories); this.movements.set(data.movements.filter(value => this.canAccess(value))); this.settlements.set(data.settlements);
+      this.couple.set(data.couple); this.categories.set(data.categories); this.movements.set(data.movements.filter(value => this.canReadMovement(value))); this.settlements.set(data.settlements);
       if (!stored || missing.length || demoUpdated) this.persistDemo();
     } catch { this.error.set('No se pudo leer la demostración. Comprueba el almacenamiento del navegador.'); }
   }
@@ -91,12 +92,12 @@ export class StoreService {
         }).then(() => loaded('categories')).catch(failed);
       } else loaded('categories');
     }, failed));
-    this.subscriptions.push(onSnapshot(query(collection(db, 'couples', coupleId, 'movements'), or(where('space', '==', 'shared'), where('ownerId', '==', this.auth.user()!.uid))), snapshot => { this.movements.set(snapshot.docs.map(item => ({ ...item.data(), id: item.id }) as Movement)); loaded('movements'); }, failed));
+    this.subscriptions.push(onSnapshot(query(collection(db, 'couples', coupleId, 'movements'), or(where('space', '==', 'shared'), where('ownerId', '==', this.auth.user()!.uid), where('type', '==', 'income'))), snapshot => { this.movements.set(snapshot.docs.map(item => ({ ...item.data(), id: item.id }) as Movement)); loaded('movements'); }, failed));
     this.subscriptions.push(onSnapshot(collection(db, 'couples', coupleId, 'settlements'), snapshot => { this.settlements.set(snapshot.docs.map(item => ({ ...item.data(), id: item.id }) as Settlement)); loaded('settlements'); }, failed));
     this.subscriptions.push(onSnapshot(query(collection(db, 'couples', coupleId, 'recurringMovements'), or(where('space', '==', 'shared'), where('ownerId', '==', this.auth.user()!.uid))), snapshot => { this.recurringMovements.set(snapshot.docs.map(item => ({ ...item.data(), id: item.id }) as RecurringMovement)); loaded('recurringMovements'); }, failed));
   }
   private persistDemo(): void {
-    const data: HouseholdData = { couple: this.couple()!, categories: this.categories(), movements: [...this.demoAllMovements.filter(value => !this.canAccess(value)), ...this.movements()], settlements: this.settlements(), recurringMovements: [...this.demoAllRecurring.filter(value => !this.canAccess(value)), ...this.recurringMovements()] };
+    const data: HouseholdData = { couple: this.couple()!, categories: this.categories(), movements: [...this.demoAllMovements.filter(value => !this.canReadMovement(value)), ...this.movements()], settlements: this.settlements(), recurringMovements: [...this.demoAllRecurring.filter(value => !this.canAccess(value)), ...this.recurringMovements()] };
     localStorage.setItem('hucha-demo-v1', JSON.stringify(data));
     this.demoAllMovements = data.movements;
     this.demoAllRecurring = data.recurringMovements!;

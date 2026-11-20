@@ -189,8 +189,8 @@ service cloud.firestore {
             && (!category.archived || value.get('recurringId', '') != '' || (exists(/databases/$(database)/documents/couples/$(cid)/movements/$(id)) && resource.data.categoryId == value.categoryId))
             && metadata(value, cid);
         }
-        allow get: if member(cid) && (!exists(/databases/$(database)/documents/couples/$(cid)/movements/$(id)) || accessible(resource.data));
-        allow list: if member(cid) && accessible(resource.data);
+        allow get: if member(cid) && (!exists(/databases/$(database)/documents/couples/$(cid)/movements/$(id)) || accessible(resource.data) || resource.data.type == 'income');
+        allow list: if member(cid) && (accessible(resource.data) || resource.data.type == 'income');
         allow create: if member(cid) && accessible(request.resource.data) && valid() && request.resource.data.createdBy == request.auth.uid;
         allow update: if member(cid) && accessible(resource.data) && accessible(request.resource.data) && valid() && immutableMetadata()
           && request.resource.data.get('recurringId', '') == resource.data.get('recurringId', '')

@@ -10,7 +10,9 @@ import { MovementListComponent } from '../../shared/movement-list/movement-list'
 import { FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { BreadcrumbComponent, BreadcrumbItem } from '../../shared/breadcrumb/breadcrumb';
-@Component({ selector: 'app-dashboard', imports: [RouterLink, FiltersComponent, MovementListComponent, ReactiveFormsModule, BreadcrumbComponent], templateUrl: './dashboard.html', styleUrl: './dashboard.css' })
+import { MonthlyLinesComponent } from '../../shared/monthly-lines/monthly-lines';
+import { monthlySeries } from '../../services/monthly-series';
+@Component({ selector: 'app-dashboard', imports: [RouterLink, FiltersComponent, MovementListComponent, ReactiveFormsModule, BreadcrumbComponent, MonthlyLinesComponent], templateUrl: './dashboard.html', styleUrl: './dashboard.css' })
 export class DashboardComponent {
   @ViewChild('sortMenu') sortMenu?: ElementRef<HTMLDetailsElement>;
   readonly sortOptions: { value: MovementSort; label: string }[] = [
@@ -35,7 +37,11 @@ export class DashboardComponent {
   readonly pageCount = computed(() => Math.max(1, Math.ceil(this.view.listMovements().length / this.pageSize)));
   readonly currentPage = computed(() => Math.min(this.page(), this.pageCount()));
   readonly pagedMovements = computed(() => this.view.listMovements().slice((this.currentPage() - 1) * this.pageSize, this.currentPage() * this.pageSize));
-  readonly chartMode = signal<'bars' | 'pie'>('bars');
+  readonly chartMode = signal<'bars' | 'pie' | 'lines'>('bars');
+  readonly monthlyLines = computed(() => monthlySeries(
+    this.view.filtered(), this.view.store.categories(), this.view.year(), this.view.breakdownType(),
+    item => this.view.displayAmount(item), this.view.listCategory(), this.view.listSubcategory()
+  ).filter(row => this.view.listSubcategory() ? row.detail : !row.detail));
   readonly chartColors = ['var(--color-primary)', 'var(--color-chart-2)', 'var(--color-chart-3)', 'var(--color-chart-4)', 'var(--color-positive)', 'var(--color-lilac-text)', 'var(--color-peach-text)'];
   readonly pieSlices = computed(() => {
     const total = this.view.breakdownTotal();
@@ -146,7 +152,7 @@ export class DashboardComponent {
   subcategoryName(): string { return this.view.listSubcategory() === '__none__' ? 'Sin subcategoría' : this.view.store.categories().find(item => item.id === this.view.listSubcategory())?.name || this.view.listSubcategory(); }
   selectSubcategory(id: string): void {
     this.view.listSubcategory.set(this.view.listSubcategory() === id ? '' : id);
-    document.getElementById('summary-movements')?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'start' });
+    if (this.monthly || this.chartMode() !== 'lines') document.getElementById('summary-movements')?.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'start' });
   }
   restoreListSettings(query: { get(name: string): string | null }): void {
     const type = query.get('type');

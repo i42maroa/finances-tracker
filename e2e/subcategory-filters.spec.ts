@@ -5,7 +5,7 @@ for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto(`/?year=${new Date().getFullYear()}`);
     await page.getByRole('button', { name: /Explorar la demostra/ }).click();
-    await expect(page.locator('app-movement-list tbody tr')).toHaveCount(4);
+    await expect(page.locator('app-movement-list tbody tr')).toHaveCount(6);
     await page.evaluate(() => {
       const data = JSON.parse(localStorage.getItem('hucha-demo-v1')!);
       const base = data.movements.find((item: { id: string }) => item.id === '2');
@@ -14,7 +14,7 @@ for (const width of [1440, 390]) {
       localStorage.setItem('hucha-demo-v1', JSON.stringify(data));
     });
     await page.reload(); await page.getByRole('button', { name: /Explorar la demostra/ }).click();
-    await expect(page.locator('app-movement-list tbody tr')).toHaveCount(6);
+    await expect(page.locator('app-movement-list tbody tr')).toHaveCount(8);
     const stats = await page.locator('.stat-value').allTextContents();
     const months = await page.locator('.months-table').textContent();
     if (width === 390) await page.getByRole('button', { name: 'Gráfico de sectores', exact: true }).click();
@@ -45,7 +45,7 @@ for (const width of [1440, 390]) {
     await page.getByRole('button', { name: 'Quitar filtro de categoría', exact: true }).click();
     await expect(children).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Quitar filtro de subcategoría', exact: true })).toHaveCount(0);
-    await expect(page.locator('app-movement-list tbody tr')).toHaveCount(6);
+    await expect(page.locator('app-movement-list tbody tr')).toHaveCount(8);
     await parent.click(); await parent.click();
     await expect(children).toHaveCount(0);
     await page.getByRole('button', { name: 'Ver ingresos', exact: true }).click();

@@ -1,0 +1,32 @@
+<div class="monthly-lines">
+  <p class="chart-caption">Totales mensuales de {{ year() }}.</p>
+  <div class="line-chart-container" role="region" aria-label="Gráfico de evolución mensual" (click)="closePoint()">
+    <svg [attr.viewBox]="'0 0 ' + width() + ' ' + height()" class="line-chart" [class.dense-chart]="width() < 260" role="group" aria-label="Totales mensuales. Pulsa un punto para ver su importe.">
+      @for (tick of ticks(); track $index) {
+        <line [attr.x1]="left()" [attr.x2]="right()" [attr.y1]="y(tick)" [attr.y2]="y(tick)" class="grid-line" aria-hidden="true" />
+        <text [attr.x]="left() - 10" [attr.y]="y(tick) + 5" text-anchor="end" aria-hidden="true">{{ axisMoney(tick) }}</text>
+      }
+      @for (month of months; track month) { <text class="month-label" [attr.x]="x($index)" [attr.y]="bottom() + 28" [attr.text-anchor]="rotatedMonths() ? 'end' : 'middle'" [attr.transform]="rotatedMonths() ? 'rotate(-65 ' + x($index) + ' ' + (bottom() + 28) + ')' : null" aria-hidden="true">{{ month }}</text> }
+      @for (line of lines(); track line.id) {
+        <polyline [attr.points]="line.path" [attr.stroke]="line.color" [attr.stroke-dasharray]="line.detail ? '6 4' : null" aria-hidden="true" />
+        @for (point of line.points; track point.month) {
+          <g class="chart-point" role="button" tabindex="0" aria-haspopup="dialog" [attr.aria-label]="line.label + ' · ' + months[point.month] + ' ' + year() + ': ' + money(point.value)" [attr.aria-expanded]="selection()?.id === line.id && selection()?.month === point.month" (click)="openPoint(line.id, point.month, $event)" (keydown.enter)="openPoint(line.id, point.month, $event)" (keydown.space)="$event.preventDefault(); openPoint(line.id, point.month, $event)">
+            <rect [attr.x]="point.x - (right() - left()) / 22" [attr.y]="point.y - 18" [attr.width]="(right() - left()) / 11" height="36" fill="transparent" />
+            <circle [attr.cx]="point.x" [attr.cy]="point.y" r="4" [attr.fill]="line.color" />
+          </g>
+        }
+      }
+    </svg>
+    @if (selectedPoint(); as point) {
+      <div class="point-popup" role="dialog" aria-label="Importe mensual" [style.left.px]="popupLeft()" [style.top.px]="point.y > 140 ? point.y - 124 : point.y + 16" (click)="$event.stopPropagation()">
+        <button #popupClose type="button" class="popup-close" aria-label="Cerrar importe mensual" (click)="closePoint(true)">×</button>
+        <span class="popup-category">{{ point.label }}</span>
+        <span class="popup-month">{{ monthName(point.month) }} {{ year() }}</span>
+        <strong class="popup-amount">{{ money(point.value) }}</strong>
+      </div>
+    }
+  </div>
+  <ul class="line-legend" aria-label="Leyenda del gráfico de líneas">
+    @for (line of lines(); track line.id) { <li><span class="legend-stroke" [class.detail]="line.detail" [style.color]="line.color" aria-hidden="true"></span>{{ line.label }}{{ line.detail ? '' : ' (total)' }}</li> }
+  </ul>
+</div>

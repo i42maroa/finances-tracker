@@ -26,11 +26,13 @@
         </div>
       }
       @if (navigation.movement(); as movement) {
+        @if (movement.space === 'shared' || movement.ownerId === auth.user()?.uid) {
         <div class="movement-actions" role="group" aria-label="Acciones del movimiento">
           <span class="actions-label">ESTE MOVIMIENTO</span>
           <button type="button" (click)="modal.open({ kind: 'movement', value: movement })"><span aria-hidden="true">✎</span> Editar</button>
           <button type="button" class="delete-movement" (click)="modal.open({ kind: 'delete', collection: 'movements', id: movement.id, label: movement.concept })"><span aria-hidden="true">×</span> Eliminar</button>
         </div>
+        }
       }
       @if (navigation.inProfile()) {
         <div class="movement-actions profile-actions" role="group" aria-label="Opciones del perfil">

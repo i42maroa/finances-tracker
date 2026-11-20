@@ -16,7 +16,7 @@ for (const width of [390, 1440]) {
       const income = page.getByRole('button', { name: 'Filtrar ingresos', exact: true });
       const expense = page.getByRole('button', { name: 'Filtrar gastos', exact: true });
       const balance = page.getByRole('button', { name: 'Mostrar ingresos y gastos', exact: true });
-      await expect(rows).toHaveCount(4);
+      await expect(rows).toHaveCount(6);
       const stats = await page.locator('.stat-value').allTextContents();
       const months = monthly ? '' : await page.locator('.months-table').textContent();
       await expect(balance).toHaveAttribute('aria-pressed', 'true');
@@ -33,11 +33,11 @@ for (const width of [390, 1440]) {
       await income.focus();
       await page.keyboard.press('Space');
       await expect(income).toHaveAttribute('aria-pressed', 'true');
-      await expect(rows).toHaveCount(1);
+      await expect(rows).toHaveCount(3);
       await expect(page.locator('app-movement-list .negative')).toHaveCount(0);
       await expect(page.getByRole('heading', { name: 'Ingresos por categoría', exact: true })).toBeVisible();
       await expect(page.getByRole('button', { name: 'Quitar filtro de categoría', exact: true })).toHaveCount(0);
-      await expect(page.locator('.list-count')).toHaveText('1 de 4 movimientos');
+      await expect(page.locator('.list-count')).toHaveText('3 de 6 movimientos');
       await expect(page.locator('.stat-value')).toHaveText(stats);
       if (!monthly) await expect(page.locator('.months-table')).toHaveText(months!);
       await page.getByRole('link', { name: 'Venta del mueble del salón', exact: true }).click();
@@ -46,12 +46,12 @@ for (const width of [390, 1440]) {
       await page.getByRole('button', { name: /Explorar la demostra/ }).click();
       await page.getByRole('navigation', { name: 'Ruta de navegación' }).getByRole('link', { name: monthly ? 'noviembre' : '2026', exact: true }).click();
       await expect(income).toHaveAttribute('aria-pressed', 'true');
-      await expect(rows).toHaveCount(1);
+      await expect(rows).toHaveCount(3);
       await expect(page.getByRole('heading', { name: 'Ingresos por categoría', exact: true })).toBeVisible();
 
       await page.locator('.category-row').first().click();
       await balance.click();
-      await expect(rows).toHaveCount(4);
+      await expect(rows).toHaveCount(6);
       await expect(balance).toHaveAttribute('aria-pressed', 'true');
       await expect(page.getByRole('heading', { name: 'Gastos por categoría', exact: true })).toBeVisible();
       await expect(page.locator('.category-row')).toHaveCount(3);
@@ -78,7 +78,7 @@ for (const width of [390, 1440]) {
 test('el filtro de tipo combina la búsqueda, muestra vacíos y reinicia la paginación', async ({ page }) => {
   await page.goto('/?year=2026');
   await page.getByRole('button', { name: /Explorar la demostra/ }).click();
-  await expect(page.locator('app-movement-list tbody tr')).toHaveCount(4);
+  await expect(page.locator('app-movement-list tbody tr')).toHaveCount(6);
   await page.evaluate(() => {
     const data = JSON.parse(localStorage.getItem('hucha-demo-v1')!);
     const expense = data.movements.find((item: { id: string }) => item.id === '2');

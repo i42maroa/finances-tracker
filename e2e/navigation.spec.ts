@@ -48,7 +48,7 @@ test('categoría y nombre filtran solo la lista y Cancelar descarta el formulari
   await dialog.getByRole('button', { name: 'Cancelar', exact: true }).click();
   await expect(page.locator('app-movement-list tbody tr')).toHaveCount(1);
   await page.getByRole('button', { name: 'Quitar filtro de nombre' }).click();
-  await expect(page.locator('app-movement-list tbody tr')).toHaveCount(4);
+  await expect(page.locator('app-movement-list tbody tr')).toHaveCount(6);
 });
 
 test('la búsqueda ignora tildes y se conserva al volver del detalle y recargar', async ({ page }) => {
@@ -167,12 +167,12 @@ test('alterna ingresos y gastos, muestra sectores y permite filtrar desde una cu
   await expect(page.getByRole('navigation', { name: 'Paginación de movimientos' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Ver ingresos', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Ingresos por categoría' })).toBeVisible();
-  await expect(page.locator('.category-total')).toContainText('120,00');
-  await expect(page.locator('.category-row')).toHaveCount(1);
+  await expect(page.locator('.category-total')).toContainText('2445,00');
+  await expect(page.locator('.category-row')).toHaveCount(3);
   await page.getByRole('button', { name: 'Gráfico de sectores', exact: true }).click();
-  await expect(page.locator('.category-pie path')).toHaveCount(1);
+  await expect(page.locator('.category-pie path')).toHaveCount(3);
   expect(await page.locator('.category-pie path').first().getAttribute('d')).not.toContain('NaN');
-  await page.locator('.category-pie path').first().focus();
+  await page.locator('.category-pie path').filter({ hasText: 'Otros ingresos' }).focus();
   await page.keyboard.press('Enter');
   await expect(page.locator('app-movement-list tbody tr')).toHaveCount(1);
   await expect(page.getByRole('link', { name: 'Venta del mueble del salón', exact: true })).toBeVisible();
@@ -180,7 +180,7 @@ test('alterna ingresos y gastos, muestra sectores y permite filtrar desde una cu
   await page.getByRole('button', { name: 'Ver gastos', exact: true }).click();
   await expect(page.locator('.category-pie path')).toHaveCount(3);
   await expect(page.getByRole('button', { name: 'Quitar filtro de categoría' })).toHaveCount(0);
-  await expect(page.locator('app-movement-list tbody tr')).toHaveCount(4);
+  await expect(page.locator('app-movement-list tbody tr')).toHaveCount(6);
   await page.getByRole('button', { name: 'Gráfico de barras', exact: true }).click();
   await expect(page.locator('.category-pie')).toHaveCount(0);
   await expect(page.locator('.bar-track')).toHaveCount(3);
